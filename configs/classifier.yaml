@@ -1,0 +1,19 @@
+# Phase 3 real training run: Stage 2 classifier head (gated text fusion, on
+# top of a Stage 1 checkpoint's vision encoder).
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/classifier
+log_dir: runs/classifier
+attention_maps_dir: runs/classifier/attention_maps
+
+seed: 0
+epochs: 8
+batch_size: 16
+num_workers: 4
+lr: 0.0001
+weight_decay: 0.01
+max_text_length: 256
+
+stage1_checkpoint: checkpoints/align/local_on/best.pt  # override with --stage1-checkpoint
+freeze_vision_encoder: false
+attention_snapshot_every: 2
+attention_snapshot_samples: 4

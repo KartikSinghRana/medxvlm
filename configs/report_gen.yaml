@@ -1,0 +1,23 @@
+# Phase 3 real training run: Stage 3 report generation (LoRA on Qwen2.5-1.5B-Instruct).
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/report_gen
+log_dir: runs/report_gen
+samples_dir: runs/report_gen/samples
+
+seed: 0
+epochs: 3
+batch_size: 2
+grad_accum_steps: 8
+num_workers: 2
+lr: 0.0002
+weight_decay: 0.0
+
+stage1_checkpoint: checkpoints/align/local_on/best.pt  # override with --stage1-checkpoint
+decoder_name: Qwen/Qwen2.5-1.5B-Instruct
+pooled_grid_size: 7
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+max_new_tokens: 128
+sample_every: 1
+num_samples: 3

@@ -1,0 +1,23 @@
+# v2 Stage 1 (post-Phase-5 rebuild): XrayDINOv2 image tower (frozen), frontal
+# views only, fixed labels / cleaned text, more epochs, higher LR on the
+# freshly-initialised projection layers. See docs/cross_dataset_evaluation.md
+# for why the Phase 3 recipe (BiomedCLIP init, full fine-tune, 5 epochs,
+# all views) produced an alignment too weak to support image-only heads.
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/align_v2
+log_dir: runs/align_v2
+
+seed: 0
+epochs: 15
+batch_size: 32
+num_workers: 4
+lr: 0.00002        # text encoder
+proj_lr: 0.001     # vision_proj / text_proj / logit_scale
+weight_decay: 0.01
+max_text_length: 256
+
+vision_backbone: xraydinov2
+freeze_vision_encoder: true
+projections: [Frontal]
+use_local_loss: true
+pretrained: true

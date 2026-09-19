@@ -1,0 +1,36 @@
+# v2 Stage 3 (post-Phase-5 rebuild): LoRA report generation on top of the v2
+# vision tower, frontal views only, cleaned report text (no "XXXX"), and
+# abnormal-study oversampling to counter the modal-normal-report collapse
+# Phase 5 measured (106/150 identical generations from the Phase 3 model).
+#
+# vision_checkpoint: the v2 Stage 2 image-only classifier's fine-tuned
+# XrayDINOv2 tower (0.855 test AUROC). Stage 1 v2 froze its tower, so its
+# checkpoint would supply the *pretrained* XrayDINOv2 unchanged; the Stage 2
+# tower is the one that has demonstrably learned this dataset's findings.
+# Still frozen inside Stage 3 -- only projector + LoRA train.
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/report_gen_v2
+log_dir: runs/report_gen_v2
+samples_dir: runs/report_gen_v2/samples
+
+seed: 0
+epochs: 6
+early_stopping_patience: 2
+batch_size: 4
+grad_accum_steps: 4          # effective batch 16, same as Phase 3
+num_workers: 2
+lr: 0.0002
+weight_decay: 0.0
+
+vision_checkpoint: checkpoints/classifier_v2/local_on/best.pt
+decoder_name: Qwen/Qwen2.5-1.5B-Instruct
+pooled_grid_size: 8          # 16x16 XrayDINOv2 patch grid -> 8x8 = 64 visual tokens (Phase 3: 7x7 = 49)
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+max_new_tokens: 128
+sample_every: 1
+num_samples: 3
+
+projections: [Frontal]
+oversample_abnormal: true

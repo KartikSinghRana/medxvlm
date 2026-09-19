@@ -1,0 +1,63 @@
+{
+  "n_images": 748,
+  "stage2_blind_image_only": {
+    "per_class_auroc": {
+      "No Finding": 0.561972709664783,
+      "Enlarged Cardiomediastinum": null,
+      "Cardiomegaly": 0.5820625377077828,
+      "Lung Opacity": 0.35684391702146934,
+      "Lung Lesion": 0.5173326502732241,
+      "Edema": 0.47392810545732666,
+      "Consolidation": 0.42512970668310474,
+      "Pneumonia": 0.5063235662409216,
+      "Atelectasis": 0.5562101129111439,
+      "Pneumothorax": 0.4710299340436327,
+      "Pleural Effusion": 0.5290556900726393,
+      "Pleural Other": 0.4889937106918239,
+      "Fracture": 0.6218372907746205,
+      "Support Devices": 0.5058876811594203
+    },
+    "macro_auroc": 0.5074313548232225,
+    "n_valid": 13
+  },
+  "stage2_text_fusion_ground_truth_report": {
+    "per_class_auroc": {
+      "No Finding": 0.8564101820081103,
+      "Enlarged Cardiomediastinum": null,
+      "Cardiomegaly": 0.8801464622298042,
+      "Lung Opacity": 0.9332185886402754,
+      "Lung Lesion": 0.877903005464481,
+      "Edema": 0.829891573311738,
+      "Consolidation": 0.7890789541274978,
+      "Pneumonia": 0.8382168795391935,
+      "Atelectasis": 0.979616230176517,
+      "Pneumothorax": 0.7838254693049214,
+      "Pleural Effusion": 0.7689131019639495,
+      "Pleural Other": 0.6352201257861635,
+      "Fracture": 0.7964188400155702,
+      "Support Devices": 0.7674365942028984
+    },
+    "macro_auroc": 0.8258689235977786,
+    "n_valid": 13
+  },
+  "stage1_zero_shot_cosine_similarity": {
+    "per_class_auroc": {
+      "No Finding": 0.3576034994305446,
+      "Enlarged Cardiomediastinum": null,
+      "Cardiomegaly": 0.7533858988495226,
+      "Lung Opacity": 0.6027901077996194,
+      "Lung Lesion": 0.3748292349726776,
+      "Edema": 0.7102173032797949,
+      "Consolidation": 0.5412236091847742,
+      "Pneumonia": 0.49993739043325813,
+      "Atelectasis": 0.6715971910951741,
+      "Pneumothorax": 0.45621511922881786,
+      "Pleural Effusion": 0.5299973096583266,
+      "Pleural Other": 0.17520215633423178,
+      "Fracture": 0.597508758271701,
+      "Support Devices": 0.6951992753623188
+    },
+    "macro_auroc": 0.5358236041462123,
+    "n_valid": 13
+  }
+}

@@ -1,0 +1,28 @@
+# v2 Stage 2 (post-Phase-5 rebuild): IMAGE-ONLY classifier head on the v2
+# Stage 1 encoder. No text fusion -- the paired report is never seen, so the
+# reported AUROC is a genuinely blind, image-based number comparable to
+# RadZero's zero-shot protocol. Asymmetric loss for the heavy per-class
+# imbalance, split LR (pretrained encoder vs. fresh head), cosine schedule,
+# early stopping on val macro AUROC.
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/classifier_v2
+log_dir: runs/classifier_v2
+attention_maps_dir: runs/classifier_v2/attention_maps
+
+seed: 0
+epochs: 25
+batch_size: 32
+num_workers: 4
+lr: 0.001           # classifier head
+backbone_lr: 0.00001
+weight_decay: 0.05
+max_text_length: 256  # unused when use_text_fusion is false
+loss: asl
+early_stopping_patience: 6
+
+stage1_checkpoint: checkpoints/align_v2/local_on/best.pt
+freeze_vision_encoder: false
+use_text_fusion: false
+projections: [Frontal]
+attention_snapshot_every: 5
+attention_snapshot_samples: 4

@@ -1,0 +1,19 @@
+# v2 baseline (post-Phase-5 rebuild): same plain "encoder + linear head, BCE"
+# recipe as baseline.yaml, but on the fixed labels (labeler negation-scope
+# fix), frontal views only, cleaned report text. Run once per backbone:
+#   --backbone vit_base_patch16_224   (ImageNet ViT-B/16, the original baseline)
+#   --backbone xraydinov2             (same CXR-pretrained tower as the v2 pipeline)
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/baseline_v2
+log_dir: runs/baseline_v2
+
+seed: 0
+epochs: 12
+batch_size: 32
+num_workers: 4
+lr: 0.00005
+weight_decay: 0.01
+loss: bce
+pretrained: true
+backbone: vit_base_patch16_224
+projections: [Frontal]

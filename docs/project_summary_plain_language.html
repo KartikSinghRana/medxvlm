@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Source for docs/project_summary_plain_language.pdf. Regenerate with:
+     weasyprint docs/project_summary_plain_language.html docs/project_summary_plain_language.pdf -->
+<style>
+  @page { size: A4; margin: 2.2cm 2cm 2.4cm 2cm;
+    @bottom-center { content: "MedXVLM Project Summary — Page " counter(page) " of " counter(pages); font-size: 8.5pt; color: #8a8f98; font-family: 'Helvetica Neue', Arial, sans-serif; } }
+  * { box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1f2430; font-size: 11pt; line-height: 1.55; }
+  .cover { height: 24.5cm; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+  .cover .kicker { color: #2f6fed; font-weight: 700; letter-spacing: 0.14em; font-size: 11pt; text-transform: uppercase; margin-bottom: 0.6cm; }
+  .cover h1 { font-size: 30pt; margin: 0 0 0.4cm 0; color: #12162a; }
+  .cover .subtitle { font-size: 14pt; color: #4a5060; margin-bottom: 1.2cm; }
+  .cover .meta { font-size: 10.5pt; color: #8a8f98; margin-top: 2cm; }
+  .cover .badge-row { display: flex; justify-content: center; gap: 0.4cm; margin-top: 1cm; flex-wrap: wrap; }
+  .cover .badge { border: 1px solid #d8dce3; border-radius: 999px; padding: 0.18cm 0.55cm; font-size: 9.5pt; color: #4a5060; }
+  h2 { font-size: 17pt; color: #12162a; border-bottom: 2.5px solid #2f6fed; padding-bottom: 0.15cm; margin-top: 0; margin-bottom: 0.5cm; }
+  h2 .num { color: #2f6fed; margin-right: 0.15cm; }
+  h3 { font-size: 12.5pt; color: #12162a; margin-bottom: 0.2cm; }
+  section { page-break-before: always; padding-top: 0.2cm; }
+  section:first-of-type { page-break-before: avoid; }
+  p { margin: 0 0 0.4cm 0; }
+  .lead { font-size: 12pt; color: #3a4050; }
+  .callout { background: #f2f6ff; border-left: 4px solid #2f6fed; border-radius: 6px; padding: 0.4cm 0.55cm; margin: 0.4cm 0; font-size: 10.5pt; }
+  .callout.warn { background: #fff6ed; border-left-color: #e07b1a; }
+  .callout.good { background: #edfaf1; border-left-color: #1fa35a; }
+  .callout b { color: #12162a; }
+  .stage-row { display: flex; gap: 0.4cm; margin: 0.5cm 0; }
+  .stage-box { flex: 1; border: 1px solid #e1e4ea; border-radius: 8px; padding: 0.4cm; background: #fafbfd; }
+  .stage-box .stage-label { font-size: 8.5pt; color: #2f6fed; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.15cm; }
+  .stage-box h4 { margin: 0 0 0.2cm 0; font-size: 11pt; }
+  .stage-box p { font-size: 9.5pt; margin: 0; color: #4a5060; }
+  table { width: 100%; border-collapse: collapse; margin: 0.35cm 0 0.5cm 0; font-size: 9.8pt; }
+  th, td { border: 1px solid #e1e4ea; padding: 0.22cm 0.3cm; text-align: left; }
+  th { background: #12162a; color: white; font-weight: 600; font-size: 9.3pt; }
+  tr:nth-child(even) td { background: #f7f8fb; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar-wrap { margin: 0.5cm 0; }
+  .bar-row { display: flex; align-items: center; margin-bottom: 0.28cm; }
+  .bar-label { width: 5.6cm; font-size: 9.5pt; color: #2c3140; padding-right: 0.3cm; }
+  .bar-track { flex: 1; background: #eef0f4; border-radius: 4px; height: 0.5cm; position: relative; }
+  .bar-fill { height: 100%; border-radius: 4px; background: #2f6fed; }
+  .bar-fill.orange { background: #e07b1a; } .bar-fill.green { background: #1fa35a; } .bar-fill.grey { background: #9aa1ad; }
+  .bar-value { width: 1.6cm; text-align: right; font-size: 9.5pt; font-weight: 700; color: #12162a; padding-left: 0.25cm; }
+  .chance-line { position: absolute; top: -0.1cm; bottom: -0.1cm; left: 50%; border-left: 1.5px dashed #b6bac2; }
+  ul, ol { margin: 0.2cm 0 0.4cm 0; padding-left: 0.55cm; }
+  li { margin-bottom: 0.18cm; }
+  .glossary dt { font-weight: 700; color: #12162a; margin-top: 0.25cm; }
+  .glossary dd { margin: 0.05cm 0 0 0; color: #4a5060; font-size: 10pt; }
+  .footnote { font-size: 8.5pt; color: #8a8f98; }
+  .two-col { display: flex; gap: 0.5cm; } .two-col > div { flex: 1; }
+  blockquote { margin: 0.2cm 0 0.4cm 0.3cm; padding-left: 0.4cm; border-left: 3px solid #d8dce3; color: #3a4050; font-size: 10pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="kicker">B.Sc. Major Project — Plain-Language Summary</div>
+  <h1>MedXVLM</h1>
+  <div class="subtitle">An AI System for Reading Chest X-Rays — What Was Built,<br>How Well It Actually Works, and How It Compares</div>
+  <div class="badge-row">
+    <div class="badge">Image + Text AI</div>
+    <div class="badge">Chest X-Rays</div>
+    <div class="badge">Compared Against 2 Published AI Models</div>
+    <div class="badge">Rebuilt &amp; Re-tested Honestly</div>
+  </div>
+  <div class="meta">Prepared 2026-09-19 (updated after the Stage 3 retrain) &nbsp;·&nbsp; Kartik Singh Rana</div>
+</div>
+
+<section>
+<h2><span class="num">1.</span>What This Project Is, In One Paragraph</h2>
+<p class="lead">MedXVLM is a computer program that looks at a chest X-ray image and does three things a radiologist does: it learns to connect what it <i>sees</i> in the image with what a doctor <i>writes</i> about it, it flags which specific problems (like an enlarged heart or fluid around the lungs) are likely present, and it drafts a written report describing the findings. The project's goal was not just to build this pipeline, but to test it rigorously — including testing it against two real, published research AI systems (called <b>RadZero</b> and <b>CheXOne</b>) on the same images, so the results are a fair, honest picture of what actually works and what doesn't.</p>
+
+<div class="callout">
+<b>Why this matters:</b> Chest X-rays are one of the most common medical scans in the world, and there aren't enough radiologists everywhere to read them all quickly. AI systems like this one are being researched as a way to give a "second opinion" fast, or highlight images that need urgent attention.
+</div>
+
+<h3>The three-stage pipeline that was built</h3>
+<div class="stage-row">
+  <div class="stage-box"><div class="stage-label">Stage 1</div><h4>Learning to Connect Pictures and Words</h4><p>The model is shown thousands of X-ray images paired with their real reports, and learns which visual patterns go with which words (e.g. what "cardiomegaly" looks like on film).</p></div>
+  <div class="stage-box"><div class="stage-label">Stage 2</div><h4>Spotting Specific Problems</h4><p>Using what it learned in Stage 1, the model is trained to tick "yes/no" boxes for 14 standard conditions (e.g. Pneumonia, Fracture, Fluid around the lung) for a new, unseen image.</p></div>
+  <div class="stage-box"><div class="stage-label">Stage 3</div><h4>Writing the Report</h4><p>The model is connected to a small language model (like a mini version of ChatGPT) so it can write a findings paragraph in full sentences, not just a checklist.</p></div>
+</div>
+
+<p>All of this was trained on a real, public dataset of <b>3,826 usable chest X-ray studies and 7,426 images</b> from Indiana University (a well-known open medical imaging dataset), split fairly into training data, a validation set (used only for tuning), and a completely separate test set the model never saw during training — that test set is what every "how good is it" number below is measured on.</p>
+</section>
+
+<section>
+<h2><span class="num">2.</span>Does It Spot Diseases? — The Honest Answer</h2>
+
+<p>The main way to measure "how good is this at spotting disease" is a score called <b>AUROC</b> (think of it as a 0–100% score for how well the model tells sick from healthy). A quick way to read it:</p>
+<div class="callout"><b>50% = pure guessing</b> (a coin flip). <b>100% = perfect.</b> Real hospital-grade AI systems for this kind of task usually score somewhere in the <b>80–90%</b> range.</div>
+
+<h3>First result: the full pipeline clearly beat a simple baseline</h3>
+<div class="bar-wrap">
+  <div class="bar-row"><div class="bar-label">Simple baseline model</div><div class="bar-track"><div class="bar-fill grey" style="width:69.4%"></div><div class="chance-line"></div></div><div class="bar-value">69%</div></div>
+  <div class="bar-row"><div class="bar-label">Full MedXVLM pipeline</div><div class="bar-track"><div class="bar-fill green" style="width:86.5%"></div><div class="chance-line"></div></div><div class="bar-value">87%</div></div>
+</div>
+
+<div class="callout warn">
+<b>But here's the honest catch, found during later testing:</b> that 87% was measured in a way that wasn't fair. The model was also given a copy of the <i>real doctor's report text</i> for the same X-ray as an extra hint while it made its prediction — like giving a student the answer key during the test. Re-tested <b>without</b> the hint (image only, exactly how a doctor would use it), the score dropped to <b>51% — essentially random guessing</b>.
+</div>
+
+<h3>What we found and fixed</h3>
+<ul>
+<li><b>Thousands of training labels were wrong.</b> The reports are turned into yes/no labels by a rule-based reader. In a sentence like <i>"No consolidation, pleural effusion, <b>or pneumothorax</b>"</i> the word "no" didn't reach the last item, so clean X-rays were labelled as <i>having</i> a collapsed lung. After the fix, the pneumothorax rate fell from 10% to 0.8% (a clinically plausible level) and fluid-around-the-lung from 20% to 5%. An independent check: an outside model (RadZero) agreed far more with the corrected labels than the old ones.</li>
+<li><b>The classifier was retrained image-only</b>, so it can no longer read the answer out of the report.</li>
+<li><b>Front-view images only</b>, and an image encoder pre-trained specifically on chest X-rays (a public, openly-licensed one).</li>
+</ul>
+
+<div class="bar-wrap">
+  <div class="bar-row"><div class="bar-label">Original model, image only</div><div class="bar-track"><div class="bar-fill grey" style="width:57.2%"></div><div class="chance-line"></div></div><div class="bar-value">57%</div></div>
+  <div class="bar-row"><div class="bar-label">Rebuilt model, image only</div><div class="bar-track"><div class="bar-fill green" style="width:85.5%"></div><div class="chance-line"></div></div><div class="bar-value">86%</div></div>
+  <div class="bar-row"><div class="bar-label">RadZero (outside AI, same images)</div><div class="bar-track"><div class="bar-fill" style="width:86.8%"></div><div class="chance-line"></div></div><div class="bar-value">87%</div></div>
+</div>
+<p class="footnote">All three bars: the same 377 never-seen-before front-view test X-rays, the same corrected labels, no hint to anyone. Averaged over the 8 conditions shared with RadZero; over all 13 measurable conditions the rebuilt model scores 83%.</p>
+
+<div class="callout good">
+<b>This is the number to quote: 86% (0.855 AUROC), measured fairly</b> — within 1 point of RadZero, a published system trained on roughly 100× more data. Most of the recovery came from cleaning the labels, front views and the X-ray-specific encoder; the project's own attention-based design adds a further 5–8 points over a plain classifier on the same data (78–80%).
+</div>
+</section>
+
+<section>
+<h2><span class="num">3.</span>Does It Write Reports? — Before and After the Retrain</h2>
+
+<p>Stage 3 writes a "findings" paragraph for an X-ray. It is scored by extracting the medical claims from the AI's text (e.g. "no fracture", "enlarged heart") and checking them against the true findings — a <b>clinical-efficacy score</b> from 0 to 1 — rather than judging whether the text merely <i>sounds</i> like a report.</p>
+
+<h3>The original model had collapsed into one sentence</h3>
+<p>Tested on 150 different X-rays, the first version produced <b>only 5 different reports in total, and 106 of the 150 were the identical text</b> — a generic "everything looks normal" paragraph, even for images whose real reports described an enlarged heart or a fracture. It had learned that "normal" is the safe answer (70% of training reports are normal) and stopped looking at the image.</p>
+
+<h3>What the retrain changed</h3>
+<ul>
+<li>Built on the rebuilt, X-ray-specific image encoder from Stage 2 — the one that can actually tell findings apart.</li>
+<li>Front views only, cleaned report text, more image detail passed to the language model.</li>
+<li><b>Abnormal cases shown to the model as often as normal ones during training</b>, so "say normal" stops being the cheapest strategy.</li>
+</ul>
+
+<table>
+<tr><th>System (same 70 front-view test X-rays)</th><th class="num">Clinical-efficacy score</th><th class="num">Different reports produced (of 150)</th><th class="num">Invents catheters / lines that aren't there</th></tr>
+<tr><td><b>MedXVLM, retrained</b></td><td class="num"><b>0.152</b></td><td class="num">61</td><td class="num">10% of cases</td></tr>
+<tr><td>CheXOne (outside AI, off-the-shelf)</td><td class="num">0.149</td><td class="num">87</td><td class="num">0%</td></tr>
+<tr><td>MedXVLM, original</td><td class="num">0.078</td><td class="num">5</td><td class="num">1%</td></tr>
+</table>
+
+<p><b>The good:</b> the collapse is fixed, the score roughly doubled, and on this measure the project's model is now <b>level with CheXOne</b> — a 3-billion-parameter system from a Stanford lab. It now correctly writes "Cardiomegaly" for enlarged hearts the old model always called normal.</p>
+
+<div class="callout warn">
+<b>The honest new problem:</b> in about 1 in 10 front-view cases the retrained model <b>invents medical equipment or surgery that isn't in the image</b> — "IJ catheter tip at the SVC", "surgical clips from prior lobectomy". This happened because abnormal training reports mention lines and tubes four times more often than normal ones, so when we forced the model to pay attention to abnormal cases it learned "abnormal ⇒ mention a catheter" as a shortcut. CheXOne never does this. So the retrain traded one failure (always saying normal) for a smaller but more dangerous one (making things up). Neither model is anywhere near usable for real report drafting on ~3,000 training studies; a score of 0.15 means most specific findings are still missed.
+</div>
+
+<p class="footnote">Two traditional text-similarity scores (BLEU, ROUGE) were also computed and slightly favour the <i>original, collapsed</i> model — because its boilerplate happens to match the most common reference wording. That is a known weakness of those metrics for radiology reports, which is why the clinical-efficacy score is used to rank the systems here.</p>
+</section>
+
+<section>
+<h2><span class="num">4.</span>How Does It Compare to Real Published AI Systems?</h2>
+<div class="two-col">
+<div class="stage-box"><h4>RadZero (2025)</h4><p>A small, specialised AI (about 200 million parameters) that, given an X-ray and a disease name, says how likely that disease is present and can highlight <i>where</i> it's looking. Trained on ~350,000 X-ray/report pairs. Its code and weights are public.</p></div>
+<div class="stage-box"><h4>CheXOne (2026)</h4><p>A much larger AI (3 billion parameters, built on chatbot-style technology) from a Stanford-affiliated group. Its specialty is writing full radiology reports with a visible reasoning trace. Trained on a purpose-built 14.7-million-example dataset. Weights are public; its own benchmarks need restricted hospital data.</p></div>
+</div>
+
+<table>
+<tr><th>Task</th><th>Outside system</th><th class="num">Its score</th><th class="num">MedXVLM (rebuilt)</th><th>Same images &amp; labels?</th></tr>
+<tr><td>Spotting diseases (AUROC, 8 shared conditions, 377 test X-rays)</td><td>RadZero</td><td class="num">87%</td><td class="num">86%</td><td>Yes — fair comparison</td></tr>
+<tr><td>Writing reports (clinical-efficacy, 70 front-view test X-rays)</td><td>CheXOne</td><td class="num">0.149</td><td class="num">0.152</td><td>Yes — fair comparison</td></tr>
+</table>
+
+<div class="callout good">
+Both outside systems were <b>actually run</b> on this project's test images — these are real measured numbers, not copied from their papers. The reverse (running MedXVLM on <i>their</i> benchmark datasets) was not possible: those datasets require credentialed hospital-data access. Being within a point of RadZero and level with CheXOne, on ~100× less training data, is a strong result for a project of this size — but note the report-writing tie comes with the hallucination caveat above, and both report scores are low in absolute terms.
+</div>
+</section>
+
+<section>
+<h2><span class="num">5.</span>Key Takeaways</h2>
+<ul>
+<li><b>The full 3-stage pipeline is built, trained on real data, and runs end-to-end</b> — nothing here is simulated or estimated.</li>
+<li><b>The first headline number (87%) was misleading</b> — measured with the answer key; the honest image-only score was 51%. Catching this by testing the hard way is one of the project's most important outcomes.</li>
+<li><b>Root causes were found and fixed</b>: a label-reading bug that mislabelled thousands of normal X-rays, a training setup that leaked the answer, side-view images diluting the data, a non-specialised image encoder — and, for report writing, a "safe answer" collapse.</li>
+<li><b>After the rebuild:</b> disease-spotting at <b>86%</b> (1 point behind RadZero); report-writing clinical-efficacy <b>0.152, level with CheXOne</b>; both on identical test images with identical corrected labels.</li>
+<li><b>Open problems, stated plainly:</b> the report writer invents equipment in ~10% of cases; it still misses most specific abnormal findings; and after the label fix some conditions have very few true test cases (one pneumothorax, five consolidations), so their individual scores are not meaningful.</li>
+</ul>
+
+<h3>What would come next</h3>
+<ol>
+<li>Fix the report writer's hallucination — e.g. show abnormal cases less aggressively during training (30% rather than 50%), or penalise mentions of devices the image doesn't support — then re-score.</li>
+<li>Test the disease classifier on a second, public hospital dataset (e.g. NIH ChestX-ray14) to see how it generalises beyond Indiana.</li>
+<li>Get more true examples of the rare conditions so their individual scores become meaningful.</li>
+</ol>
+</section>
+
+<section>
+<h2><span class="num">6.</span>Plain-Language Glossary</h2>
+<dl class="glossary">
+<dt>AUROC</dt><dd>A 0–100% score for how well a model tells "disease present" apart from "disease absent." 50% = coin-flip guessing; 100% = perfect.</dd>
+<dt>Clinical-efficacy score</dt><dd>For written reports: extracts the specific medical claims from the AI's text and checks them against the true findings, rather than judging fluency. 0 to 1; higher is better.</dd>
+<dt>Hallucination</dt><dd>When a language model states something specific (here: a catheter, a surgical clip) that has no basis in its input. Dangerous in medical text because it reads as confident fact.</dd>
+<dt>Blind / image-only test</dt><dd>Testing the model using <i>only</i> the X-ray image — no extra hints, exactly like a genuinely new patient.</dd>
+<dt>Held-out test set</dt><dd>Data set aside and never shown to the model during training or tuning, used only at the end to get an honest score.</dd>
+<dt>Parameters</dt><dd>Roughly, the "size" of an AI model — how many internal adjustable numbers it has. More generally means more capacity, but also more data and compute needed to train it well.</dd>
+</dl>
+<p class="footnote" style="margin-top:1cm;">Full technical detail and every source file behind every number: <code>docs/status_report.md</code> (sourced inventory), <code>docs/v2_rebuild.md</code>, <code>docs/cross_dataset_evaluation.md</code>, <code>docs/external_baseline_reproduction.md</code>, <code>docs/training_summary.md</code>.</p>
+</section>
+
+</body>
+</html>
