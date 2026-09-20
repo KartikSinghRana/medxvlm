@@ -408,7 +408,7 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
 7. **No METEOR / RadGraph for report generation.** BLEU-4 and ROUGE-L were added on 2026-09-19 (`scripts/eval_v2_score_reports.py`); they slightly favour the collapsed Phase 3 model and are reported but not used to rank systems (`docs/v2_rebuild.md` §3.4 item 4).
 8. **No retrieval or classification metrics on the test split for Phase 3-era Stage 1** beyond the zero-shot rows; retrieval R@k exists on val only.
 9. **Explainability limited to attention-weight overlays**; no Grad-CAM / rollout / text-grounded heatmaps / sentence attribution; no quantitative grounding metric.
-10. **`app/` demo UI not started** (only `.gitkeep`; `streamlit` pinned but unused).
+10. ~~`app/` demo UI not started~~ — built 2026-09-20: `app/app.py` + `src/medxvlm/inference.py`, headless check `scripts/sanity_check_app.py` (4/4 pass), serves on `streamlit run`. Not yet walked through in a browser by a person.
 11. **MedXVLM never evaluated on an external dataset** — `docs/cross_dataset_evaluation.md` §1/§7.
 12. **Phase 3 infrastructure incident**: first Stage 3 attempt killed at model load by session teardown; restarted with `setsid` — `docs/training_summary.md` §"What didn't finish".
 13. **`README.md` "Project status" is stale** (says Phase 3; no mention of Phases 4–5, the v2 rebuild, or the superseded number).
@@ -429,5 +429,5 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
 | Ablation | Done (local-loss on/off); ASL-vs-BCE not run | yes — Stage 2 macro AUROC 0.8645 vs 0.8648 (text-fusion protocol); Stage 1 R@1 i2t 0.0134 vs 0.0174 (`docs/ablation_study.md`) |
 | External benchmark (RadZero / CheXOne) | Done for RadZero; CheXOne qualitative + one generation run only | yes — RadZero 0.852 (own OpenI subsample), 0.868 (MedXVLM frontal test, corrected labels); CheXOne CE F1 0.105 on 150 MedXVLM images; CheXOne benchmarks: paper-reported only |
 | Cross-dataset | Done in both directions (flipped 2026-09-06; MedXVLM→NIH 2026-09-20) | yes — RadZero 0.868 vs MedXVLM 0.855 on identical images; **MedXVLM on NIH ChestX-ray14 test split: 0.714** macro AUROC, 8 classes (`chestxray14_external_eval_summary.json`) |
-| Demo app | Not started | no |
+| Demo app | Done (2026-09-20), headless-tested | n/a |
 | Version control | Not started (0 commits) | — |

@@ -40,6 +40,16 @@ def _overlay_heatmap(image_rgb: np.ndarray, attention: torch.Tensor, alpha: floa
     return overlay.astype(np.uint8)
 
 
+def overlay_attention(image: torch.Tensor, attention: torch.Tensor, alpha: float = 0.45) -> np.ndarray:
+    """One in-memory heatmap overlay: `[3, H, W]` normalised image + `[num_patches]` weights -> RGB uint8.
+
+    The in-memory counterpart of `save_grounding_snapshots` for interactive
+    use (the demo app); shares the exact same de-normalisation and colour
+    mapping so what the app shows is what the training snapshots show.
+    """
+    return _overlay_heatmap(_denormalize(image), attention, alpha=alpha)
+
+
 def save_grounding_snapshots(
     images: torch.Tensor,
     attention_weights: torch.Tensor,

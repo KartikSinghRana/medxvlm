@@ -56,7 +56,7 @@ medxvlm/
     explain/                 # grounding-heatmap snapshots
     eval/                    # classification + retrieval metrics
   docs/                      # literature review, proposal, environment notes, training results
-  app/                       # demo UI (Streamlit, later phase)
+  app/                       # Streamlit demo (app/app.py) over src/medxvlm/inference.py
   data/raw/                  # downloaded dataset (gitignored)
   data/processed/            # manifest.csv with real labels (gitignored)
   checkpoints/               # model weights (gitignored)
@@ -128,6 +128,27 @@ Each checkpoints best + last (by the relevant validation metric) under
 `checkpoints/`, and logs per-epoch loss/metrics to both TensorBoard and a
 plain CSV under `runs/` via `medxvlm.engine.loop_utils.EpochLogger`.
 
+## Demo app
+
+The Week-14 deliverable from the proposal: upload a frontal chest X-ray (or
+pick a held-out test image) → 14-class probabilities → per-label attention
+overlays → optionally a generated findings paragraph, with the reference
+report and true labels alongside when the image comes from the test split.
+
+```bash
+PYTHONPATH=src streamlit run app/app.py
+```
+
+- The classifier loads on start (~0.4 GB VRAM). Report generation is **off by
+  default** (toggle in the sidebar; loads the 1.5B decoder, ~7 GB VRAM).
+- Every screen states the measured numbers and the known failure modes
+  (thin-support classes are greyed out; device mentions in generated text are
+  flagged, since the generator hallucinates them in ~10% of cases).
+- All inference logic is in `src/medxvlm/inference.py` (`MedXVLMPipeline`);
+  the app is a thin view over it.
+- Headless functional check (no browser needed):
+  `PYTHONPATH=src python scripts/sanity_check_app.py [--no-generator]`.
+
 ## Documentation
 
 - [docs/literature_review.md](docs/literature_review.md) — the literature
@@ -182,5 +203,5 @@ plain CSV under `runs/` via `medxvlm.engine.loop_utils.EpochLogger`.
 
 Known open items: Stage 3 device hallucination; zero-shot head does not work
 at this data scale (documented negative result); some test classes have
-single-digit positives after the label fix; demo app (`app/`) not started.
+single-digit positives after the label fix.
 Full list: [docs/status_report.md](docs/status_report.md) §11.
