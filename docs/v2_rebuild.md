@@ -53,7 +53,9 @@ Script: `scripts/eval_v2_classification.py` → `docs/phase5_artifacts/v2/`. Rad
 
 All rows are apples-to-apples with each other: same 377 images, same ground truth, no text input. "8 shared" = the CheXpert↔RadZero concept matches from Phase 5 (Atelectasis, Cardiomegaly, Pleural Effusion, Pneumonia, Pneumothorax, Lung Opacity, Fracture/Bone Fracture, Edema/Pulmonary Edema).
 
-**Reading it:** the image-only classifier went from chance (0.57) to **0.855**, within **1.3 points of RadZero** — a purpose-built system trained on ~350k image-report pairs versus this project's 3k — on MedXVLM's own held-out data. It beats both same-data baselines by 5–8 points, so the attention-pooling head + ASL contributes on top of the encoder/label/view fixes (the XrayDINOv2 linear baseline isolates that: same encoder, no pipeline, 0.777).
+> **Seed-variance note (added 2026-09-20, §3.6.1):** the 0.855 row is seed 0 of the recipe. Retraining with seeds 1–3 gave 0.833 / 0.839 / 0.819 — **single-model mean 0.837 ± 0.015**; seed 0 was the best draw. The **4-seed ensemble scores 0.868**, equal to RadZero on these images. Quote the mean ± std or the ensemble, not 0.855 alone.
+
+**Reading it:** the image-only classifier went from chance (0.57) to **0.855 (seed 0; 0.837 ± 0.015 over four seeds)**, within **1.3 points of RadZero** — a purpose-built system trained on ~350k image-report pairs versus this project's 3k — on MedXVLM's own held-out data. It beats both same-data baselines by 5–8 points, so the attention-pooling head + ASL contributes on top of the encoder/label/view fixes (the XrayDINOv2 linear baseline isolates that: same encoder, no pipeline, 0.777).
 
 ### 3.2 Per class
 
@@ -146,6 +148,49 @@ The "MedXVLM on *their* dataset" direction Phase 5 could not run. NIH ChestX-ray
 
 Housekeeping note: the 45 GB download filled the host drive (see `status_report.md` §11 item 16); only the 25,596 test images (~10 GB) were kept after evaluation.
 
+### 3.6 Overnight run, 2026-09-20 — seed ensemble, decoding sweep, and a second zero-shot attempt
+
+All jobs serialized (`scripts/run_overnight_2026-09-20.sh`, `run_v2b_then_score.sh`, `run_v3b_after_v2b.sh`); every exit code is in `runs/overnight_2026-09-20*.log`, `runs/v2b_chain.log`, `runs/v3b_chain.log`.
+
+**3.6.1 Seed variance and ensemble — a correction to the headline.** The v2 Stage 2 recipe (`classifier_v2.yaml`, unchanged) was retrained with seeds 1–3 (`--seed`, ~30–39 min each). Held-out frontal test split, image-only (`docs/phase5_artifacts/v2/classifier_seed_ensemble.json`):
+
+| Model | 8 shared classes | 5 shared with ≥10 positives | All 13 | NIH ChestX-ray14 (8 mapped) |
+|---|---:|---:|---:|---:|
+| seed 0 (the checkpoint quoted in §3.1) | 0.855 | 0.862 | 0.829 | 0.714 |
+| seed 1 | 0.833 | 0.850 | 0.792 | 0.701 |
+| seed 2 | 0.839 | 0.856 | 0.808 | 0.706 |
+| seed 3 | 0.819 | 0.853 | 0.786 | 0.693 |
+| **single model, mean ± std (n=4)** | **0.837 ± 0.015** | 0.855 ± 0.005 | 0.804 ± 0.019 | 0.704 ± 0.009 |
+| **4-seed probability ensemble** | **0.868** | 0.867 | **0.835** | **0.719** |
+| RadZero, same images (reference) | 0.868 | 0.875 | n/a | 0.804 (paper, own protocol — not reproduced) |
+
+Two things follow, stated plainly. (i) **Seed 0 was the best of four draws.** The fair single-model number for this recipe is **0.837 ± 0.015**, not 0.855; every earlier mention of 0.855 should be read as "one seed, upper end of the spread". (ii) **Averaging four seeds recovers it and more: 0.868 on the 8 shared classes — numerically identical to RadZero (0.8684 vs 0.8682) on identical images and labels** — and the ensemble also helps out of distribution (NIH 0.719 vs 0.704 ± 0.009 single). Ensembling is the most reliable gain available at this data scale; it costs 4× inference, which the demo app does not currently use (single seed-0 checkpoint).
+
+**3.6.2 Decoding sweep — much of Stage 3's hallucination was greedy decoding.** Same v2 checkpoint, same 150 images, same scorer (`report_generation_scores_v2_overnight.json`):
+
+| Decoding (v2 checkpoint) | CE macro F1, frontal 70 | CE micro F1 | Distinct / 70 | Modal share | Device hallucination (frontal) | BLEU-4 | ROUGE-L |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| greedy (§3.4) | 0.152 | 0.575 | 26 | 54% | 7/70 = 10% | 9.76 | 0.280 |
+| **beam = 3, repetition penalty 1.2** | **0.176** | **0.650** | 14 | 61% | **2/70 = 3%** | 8.66 | 0.264 |
+| CheXOne instruct, greedy (reference) | 0.149 | 0.599 | 36 | 26% | 0% | 10.24 | 0.286 |
+
+Beam search with a mild repetition penalty removes about two-thirds of the invented devices and raises clinical-efficacy F1 above CheXOne-instruct — at zero training cost — but it also re-concentrates the output (14 distinct vs 26). The collapse/hallucination trade-off is therefore partly a *decoding* knob, not only a training one. The 70-image numbers carry wide error bars (single-digit positives per class); the direction is consistent across the full 150 (CE 0.119 → 0.148).
+
+**3.6.3 Zero-shot, second attempt (v3, sentence-level) — negative result, with the reason measured.** `configs/align_v3_sentence.yaml`: one report sentence per image per epoch (`SentenceAlignmentDataset`), identical sentences masked as mutual positives (`ContrastiveAlignment._multi_positive_infonce_loss`), XrayDINOv2 fine-tuned at LR 1e-5, 12 epochs, val-loss selection (26.1 min). Scoring was also upgraded to prompt-ensembled positive-minus-negative (`load_zero_shot(mode="pos_minus_neg")`, three templates each) and applied to every Stage 1 checkpoint:
+
+| Stage 1 checkpoint | pos-only prompt (Phase 5 protocol) | pos − neg, 3 templates |
+|---|---:|---:|
+| Phase 3 (report-level, both towers fine-tuned, all views) | 0.669 | 0.642 |
+| v2 (report-level, frozen tower, frontal) | 0.565 | 0.604 |
+| **v3 (sentence-level, multi-positive, frontal)** | **0.568** | **0.558** |
+| RadZero (353k pairs) | 0.868 | — |
+
+The sentence-level recipe did not help, and the scoring change is not a reliable gain either. The training curve shows why the objective barely moved (val loss 3.19 → 2.94 over 12 epochs): counting with the labeler, **only 1,683 of the 16,375 training sentences (10.3%) contain a positive or uncertain finding**; 20% are negations and 70% are boilerplate ("heart size normal", "bony structures intact"). In a batch of 32 sentences, ~3 carry class-discriminative signal; the other 29 are near-synonymous normal statements that an exact-text positive mask cannot equate, so the contrastive task is mostly "which normal phrasing belongs to which normal image" — noise. RadZero sidesteps this with LLM-extracted *finding* sentences and ~100× the images (which would put its finding-sentence count in the tens of thousands versus 1,683 here). A final variant that trains on **finding sentences only** (`align_v3b_findings.yaml`: the 900 images with a finding sentence, all normals sharing one canonical sentence) is queued; its result is recorded below when available. Whatever it shows, the conclusion so far stands: prompt-based zero-shot classification is data-scale-limited here, and the project's defensible classification claim is the supervised head and its ensemble.
+
+**3.6.4 Stage 3 v2b (30% abnormal sampling).** Failed twice at the first backward with `CUDA driver error: device not ready` — traced to `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (added for this chain; incompatible with near-cap allocations under WSL2). Relaunched without it at 20:46; result recorded below when available.
+
+<!-- OVERNIGHT_PENDING: v3b zero-shot + v2b Stage 3 results to be appended -->
+
 ## 4. What this does and doesn't change about the project's story
 
 - **The headline classification number is now real.** 0.855/0.862 macro AUROC, blind, on held-out data, against corrected labels, within ~1 point of a published state-of-the-art zero-shot system on the same images. This replaces the 0.865 text-fusion figure, which should no longer be quoted as classification accuracy.
@@ -156,7 +201,7 @@ Housekeeping note: the 45 GB download filled the host drive (see `status_report.
 ## 5. Files
 
 - Code: `src/medxvlm/data/labeler.py` (negation scope), `src/medxvlm/models/vision_encoder.py` (backbone option), `src/medxvlm/data/dataset.py` (projection filter), `src/medxvlm/models/baseline_classifier.py`, `src/medxvlm/engine/loop_utils.py` (`load_vision_encoder`), `scripts/train_{align,classifier,baseline,report}.py`, `scripts/prepare_data.py`, `scripts/validate_labeler.py`, `scripts/run_v2_rebuild.sh`, `scripts/eval_v2_classification.py`, `scripts/eval_v2_report_generation.py`, `scripts/eval_v2_score_reports.py`, `scripts/eval_external_chestxray14.py`.
-- Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`.
+- Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`, `report_gen_v2b.yaml`, `align_v3_sentence.yaml`, `align_v3b_findings.yaml`.
 - Data: `data/processed/manifest.csv` (corrected); `data/processed/manifest_v1_phase3_labels.csv` (the Phase 3 labels, kept for reproducibility).
 - Checkpoints/logs: `checkpoints/{align,classifier,baseline,report_gen}_v2/`, `runs/{align,classifier,baseline,report_gen}_v2/`, `runs/v2_rebuild.log`, `runs/train_report_gen_v2.log`.
 - Results: `docs/phase5_artifacts/v2/v2_classification_{summary.json,raw.csv}`, `docs/phase5_artifacts/v2/medxvlm_stage3_v2_generations.csv`, `docs/phase5_artifacts/v2/report_generation_scores_v2.json`, `docs/phase5_artifacts/v2/chestxray14_external_eval_{summary.json,raw.csv}`.

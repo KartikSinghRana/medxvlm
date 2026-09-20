@@ -142,16 +142,21 @@ def main() -> int:
     text_unit = config.get("text_unit", "report")
     if text_unit not in ("report", "sentence"):
         raise ValueError(f"text_unit must be 'report' or 'sentence', got {text_unit!r}")
-    dataset_cls = SentenceAlignmentDataset if text_unit == "sentence" else AlignmentDataset
+    ds_kwargs = {"projections": projections}
+    if text_unit == "sentence":
+        dataset_cls = SentenceAlignmentDataset
+        ds_kwargs["findings_only"] = bool(config.get("findings_only", False))
+    else:
+        dataset_cls = AlignmentDataset
     collate = make_collate(text_encoder, config["max_text_length"], multi_positive=(text_unit == "sentence"))
     manifest = REPO_ROOT / config["manifest"]
     train_loader = DataLoader(
-        dataset_cls(manifest, "train", projections=projections),
+        dataset_cls(manifest, "train", **ds_kwargs),
         batch_size=config["batch_size"], shuffle=True, num_workers=config["num_workers"],
         drop_last=True, collate_fn=collate,
     )
     val_loader = DataLoader(
-        dataset_cls(manifest, "val", projections=projections),
+        dataset_cls(manifest, "val", **ds_kwargs),
         batch_size=config["batch_size"], shuffle=False, num_workers=config["num_workers"], collate_fn=collate,
     )
 
@@ -169,7 +174,7 @@ def main() -> int:
     )
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(
-        f"Device: {device} | backbone: {vision_backbone} | projections: {projections} | text_unit: {text_unit} | "
+        f"Device: {device} | backbone: {vision_backbone} | projections: {projections} | text_unit: {text_unit}{' (findings_only)' if config.get('findings_only') else ''} | "
         f"freeze_vision: {config.get('freeze_vision_encoder', False)} | freeze_text: {config.get('freeze_text_encoder', False)} | use_local_loss: {config['use_local_loss']} | "
         f"epochs: {config['epochs']} | batch_size: {config['batch_size']} | train pairs: {len(train_loader.dataset)} | "
         f"trainable params: {n_trainable/1e6:.1f}M"

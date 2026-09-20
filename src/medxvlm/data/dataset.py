@@ -23,7 +23,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from medxvlm.data.labeler import split_report_sentences
+from medxvlm.data.labeler import POSITIVE, UNCERTAIN, find_mentions, split_report_sentences
 from medxvlm.models.labels import CHEXPERT_LABELS
 from medxvlm.models.vision_encoder import IMAGE_SIZE
 
@@ -177,10 +177,25 @@ class SentenceAlignmentDataset(Dataset):
         split: str,
         transform: transforms.Compose | None = None,
         projections: tuple[str, ...] | None = None,
+        findings_only: bool = False,
+        normal_sentence: str = "No acute cardiopulmonary abnormality.",
     ) -> None:
+        """`findings_only`: keep only sentences with a positive/uncertain finding mention;
+        images with none get `normal_sentence`, so all normal images are mutual positives.
+
+        # why: only ~10% of Indiana report sentences state a finding; the rest
+        # are near-synonymous normal phrasings the exact-text positive mask
+        # cannot equate, and they drown the contrastive signal (v3 result,
+        # docs/v2_rebuild.md §3.6). RadZero trains on finding sentences only.
+        """
         self.manifest_path = manifest_path
         self.rows = _load_split(manifest_path, split, projections)
-        self.sentences = [split_report_sentences(t) or [t] for t in self.rows["report_text"]]
+        self.sentences = []
+        for text in self.rows["report_text"]:
+            sents = split_report_sentences(text) or [text]
+            if findings_only:
+                sents = [x for x in sents if any(m.value in (POSITIVE, UNCERTAIN) for m in find_mentions(x))] or [normal_sentence]
+            self.sentences.append(sents)
         self.transform = transform or build_transforms(split)
 
     def __len__(self) -> int:
