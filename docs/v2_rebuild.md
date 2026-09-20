@@ -123,6 +123,29 @@ Per-class CE F1 on the 70 frontals (support in parentheses; Phase 3 / CheXOne / 
 
 **Net:** Stage 3 v2 is a genuine improvement on the failure that mattered (collapse) and matches a 3B-parameter published model on clinical efficacy on this data — but it trades collapse for hallucination, and neither system is close to clinically usable report drafting on ~3k training studies. The honest claim is "comparable to CheXOne-instruct on CE F1, with a documented hallucination rate," not "solved."
 
+### 3.5 External-dataset test — v2 Stage 2 on NIH ChestX-ray14 (added 2026-09-20)
+
+The "MedXVLM on *their* dataset" direction Phase 5 could not run. NIH ChestX-ray14 is one of RadZero's native benchmarks, fully public (Kaggle mirror `nih-chest-xrays/data`, 45 GB), and labelled by NIH's own NLP over its own reports. The v2 Stage 2 checkpoint was run **as-is** (no fine-tuning, no threshold tuning) on the **official patient-disjoint `test_list.txt` split** — 25,596 images, 2,797 patients — so every number is pure domain shift: a different hospital, different scanners, 1024px PNGs downsampled to 224, and a different labeler. Script: `scripts/eval_external_chestxray14.py` → `docs/phase5_artifacts/v2/chestxray14_external_eval_{summary.json,raw.csv}`; 132 s on the GPU.
+
+**Label mapping is deliberately narrow** — only concept-identical pairs: Cardiomegaly, Edema, Consolidation, Pneumonia, Atelectasis, Pneumothorax, Pleural Effusion→Effusion, No Finding. Not mapped: Lung Opacity (NIH's *Infiltration* is narrower), Lung Lesion (NIH splits Mass/Nodule), Pleural Other, Fracture, Support Devices, Enlarged Cardiomediastinum (absent from NIH); NIH-only Emphysema/Fibrosis/Hernia/Mass/Nodule/Infiltration/Pleural_Thickening are not predicted by MedXVLM.
+
+| NIH class | n+ (of 25,596) | AUROC |
+|---|---:|---:|
+| Effusion | 4,658 | 0.785 |
+| Edema | 925 | 0.781 |
+| Cardiomegaly | 1,069 | 0.765 |
+| Atelectasis | 3,279 | 0.708 |
+| No Finding | 9,861 | 0.698 |
+| Consolidation | 1,815 | 0.690 |
+| Pneumonia | 555 | 0.650 |
+| Pneumothorax | 2,665 | 0.634 |
+| **Macro, 8 mapped classes** | | **0.714** |
+| Macro, 7 pathologies (excl. No Finding) | | 0.716 |
+
+**Reading it.** On its home test split the same checkpoint scores 0.855 (8 RadZero-shared classes); on a different hospital's data it drops to **0.714** — a 14-point domain-shift penalty, with every class still clearly above chance and none of the per-class numbers resting on thin support (smallest n+ = 555). Pneumothorax is weakest (0.634): the corrected Indiana training set contains only 27 positive pneumothorax studies, so this is the class the model had least chance to learn. For context only — **not** a like-for-like comparison: RadZero's paper reports 0.804 on ChestX-ray14 (its own 518px protocol and label set), and supervised models *trained on* ChestX-ray14 typically report ~0.80–0.84 mean AUROC. MedXVLM was trained on 3,030 images from one outpatient site and has never seen this dataset. The honest claim: the classifier generalises to an unseen hospital at 0.71, not at 0.85.
+
+Housekeeping note: the 45 GB download filled the host drive (see `status_report.md` §11 item 16); only the 25,596 test images (~10 GB) were kept after evaluation.
+
 ## 4. What this does and doesn't change about the project's story
 
 - **The headline classification number is now real.** 0.855/0.862 macro AUROC, blind, on held-out data, against corrected labels, within ~1 point of a published state-of-the-art zero-shot system on the same images. This replaces the 0.865 text-fusion figure, which should no longer be quoted as classification accuracy.
@@ -132,8 +155,8 @@ Per-class CE F1 on the 70 frontals (support in parentheses; Phase 3 / CheXOne / 
 
 ## 5. Files
 
-- Code: `src/medxvlm/data/labeler.py` (negation scope), `src/medxvlm/models/vision_encoder.py` (backbone option), `src/medxvlm/data/dataset.py` (projection filter), `src/medxvlm/models/baseline_classifier.py`, `src/medxvlm/engine/loop_utils.py` (`load_vision_encoder`), `scripts/train_{align,classifier,baseline,report}.py`, `scripts/prepare_data.py`, `scripts/validate_labeler.py`, `scripts/run_v2_rebuild.sh`, `scripts/eval_v2_classification.py`, `scripts/eval_v2_report_generation.py`, `scripts/eval_v2_score_reports.py`.
+- Code: `src/medxvlm/data/labeler.py` (negation scope), `src/medxvlm/models/vision_encoder.py` (backbone option), `src/medxvlm/data/dataset.py` (projection filter), `src/medxvlm/models/baseline_classifier.py`, `src/medxvlm/engine/loop_utils.py` (`load_vision_encoder`), `scripts/train_{align,classifier,baseline,report}.py`, `scripts/prepare_data.py`, `scripts/validate_labeler.py`, `scripts/run_v2_rebuild.sh`, `scripts/eval_v2_classification.py`, `scripts/eval_v2_report_generation.py`, `scripts/eval_v2_score_reports.py`, `scripts/eval_external_chestxray14.py`.
 - Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`.
 - Data: `data/processed/manifest.csv` (corrected); `data/processed/manifest_v1_phase3_labels.csv` (the Phase 3 labels, kept for reproducibility).
 - Checkpoints/logs: `checkpoints/{align,classifier,baseline,report_gen}_v2/`, `runs/{align,classifier,baseline,report_gen}_v2/`, `runs/v2_rebuild.log`, `runs/train_report_gen_v2.log`.
-- Results: `docs/phase5_artifacts/v2/v2_classification_{summary.json,raw.csv}`, `docs/phase5_artifacts/v2/medxvlm_stage3_v2_generations.csv`, `docs/phase5_artifacts/v2/report_generation_scores_v2.json`.
+- Results: `docs/phase5_artifacts/v2/v2_classification_{summary.json,raw.csv}`, `docs/phase5_artifacts/v2/medxvlm_stage3_v2_generations.csv`, `docs/phase5_artifacts/v2/report_generation_scores_v2.json`, `docs/phase5_artifacts/v2/chestxray14_external_eval_{summary.json,raw.csv}`.

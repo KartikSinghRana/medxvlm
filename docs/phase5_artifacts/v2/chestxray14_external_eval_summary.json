@@ -1,0 +1,66 @@
+{
+  "dataset": "NIH ChestX-ray14, official test_list.txt split",
+  "n_images": 25596,
+  "n_patients": 2797,
+  "checkpoint": "checkpoints/classifier_v2/local_on/best.pt",
+  "trained_on": "Indiana/Open-i frontal, 3,030 images -- ChestX-ray14 never seen",
+  "label_map": {
+    "Cardiomegaly": "Cardiomegaly",
+    "Edema": "Edema",
+    "Consolidation": "Consolidation",
+    "Pneumonia": "Pneumonia",
+    "Atelectasis": "Atelectasis",
+    "Pneumothorax": "Pneumothorax",
+    "Pleural Effusion": "Effusion",
+    "No Finding": "No Finding"
+  },
+  "per_class": {
+    "No Finding": {
+      "medxvlm_head": "No Finding",
+      "n_pos": 9861,
+      "auroc": 0.6977566470733794
+    },
+    "Cardiomegaly": {
+      "medxvlm_head": "Cardiomegaly",
+      "n_pos": 1069,
+      "auroc": 0.7651812135939381
+    },
+    "Edema": {
+      "medxvlm_head": "Edema",
+      "n_pos": 925,
+      "auroc": 0.7810639036750665
+    },
+    "Consolidation": {
+      "medxvlm_head": "Consolidation",
+      "n_pos": 1815,
+      "auroc": 0.6895852570222101
+    },
+    "Pneumonia": {
+      "medxvlm_head": "Pneumonia",
+      "n_pos": 555,
+      "auroc": 0.6498284075377642
+    },
+    "Atelectasis": {
+      "medxvlm_head": "Atelectasis",
+      "n_pos": 3279,
+      "auroc": 0.7082118529339704
+    },
+    "Pneumothorax": {
+      "medxvlm_head": "Pneumothorax",
+      "n_pos": 2665,
+      "auroc": 0.6336994178554916
+    },
+    "Effusion": {
+      "medxvlm_head": "Pleural Effusion",
+      "n_pos": 4658,
+      "auroc": 0.7851894392575992
+    }
+  },
+  "macro_auroc_8_mapped_classes": 0.7138145173686774,
+  "macro_auroc_7_pathologies_excl_no_finding": 0.7161084988394343,
+  "reference_radzero_paper_cxr14_auc": {
+    "value": 0.804,
+    "note": "arXiv:2504.07416 Table 5, RadZero 518px, authors' own label set/protocol -- reported by the authors, NOT reproduced here, not the same class subset"
+  },
+  "elapsed_sec": 132.44010424613953
+}

@@ -163,3 +163,5 @@ The direction, comparability labels and skip list of §1–§8 are unchanged; on
 | MedXVLM Stage 3, Phase 3 (the §5 row) | 0.078 | 0.066 | 5 | 1% | yes — the "before" |
 
 Conclusion change: MedXVLM's report generator is now level with CheXOne-instruct on clinical efficacy on this data, rather than behind it — but it achieves this with a hallucination failure mode CheXOne does not exhibit, and both remain far from usable (macro F1 ≈ 0.15). BLEU-4 / ROUGE-L were also computed for the first time and slightly favour the *collapsed* Phase 3 model (12.1 / 0.30 vs 9.8 / 0.28), which is why they are not used to rank the systems here.
+
+**MedXVLM on an external dataset — the direction §1 said was not run — was run on 2026-09-20** (`docs/v2_rebuild.md` §3.5): v2 Stage 2 on the official NIH ChestX-ray14 test split (25,596 images, never seen), 8 concept-identical classes, **macro AUROC 0.714** vs 0.855 on its home split. Comparability: *approximate* — same task and metric, but a different hospital, labeler, and class subset; RadZero's paper-reported 0.804 on this dataset uses its own protocol and is cited only, not reproduced.

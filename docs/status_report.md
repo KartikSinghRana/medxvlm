@@ -387,6 +387,7 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
   Report generation (doc §5, 150 identical images, tagged apples-to-apples): CheXOne 0.105 vs MedXVLM 0.075 macro F1 (§6 above).
 - **Addendum §9** records the label fix and the post-rebuild replacement row: RadZero 0.868 vs MedXVLM v2 image-only 0.855 (frontal test, corrected labels), and states that §4's Pneumothorax row "should be disregarded (it was almost entirely false positives)".
 - **Skip list** (doc §7): direction flipped; RadZero's other datasets not run; only 8/18 and 8/14 classes comparable; CheXOne ran in instruct not reasoning mode; no BLEU/RadGraph/BERTScore computed.
+- **Update 2026-09-20 — the un-run direction was run.** v2 Stage 2 evaluated as-is on the **official NIH ChestX-ray14 test split** (25,596 images / 2,797 patients, Kaggle mirror `nih-chest-xrays/data`, never seen in training): **macro AUROC 0.714** over 8 concept-identical classes (per class 0.634 Pneumothorax … 0.785 Effusion); vs 0.855 at home. Source: `scripts/eval_external_chestxray14.py` → `docs/phase5_artifacts/v2/chestxray14_external_eval_summary.json` (`elapsed_sec` 132). Labelled *approximate* (different hospital/labeler/class subset). RadZero's paper-reported 0.804 on this dataset is cited only.
 
 ---
 
@@ -412,7 +413,8 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
 12. **Phase 3 infrastructure incident**: first Stage 3 attempt killed at model load by session teardown; restarted with `setsid` — `docs/training_summary.md` §"What didn't finish".
 13. **`README.md` "Project status" is stale** (says Phase 3; no mention of Phases 4–5, the v2 rebuild, or the superseded number).
 14. **Zero git commits** — no history, no reproducible snapshot of which code produced which checkpoint beyond file mtimes and the `config` dicts saved inside each `.pt`.
-15. **A residual labeler false positive** was observed during Stage 3 inspection: `1367_IM-0237-1001` is labelled Pleural Effusion = 1 from *"…no pleural line to suggest pneumothorax or costophrenic blunting to suggest large pleural effusion"* — negation does not reach across "…to suggest". The 2026-09-17 fix covered the dominant coordinated-list pattern, not every scope pattern. Not fixed.
+15. **Storage incident (2026-09-19/20).** `df` inside WSL reports the virtual disk's 1 TB nominal size, not the host drive; the 45 GB ChestX-ray14 download grew `F:\WSL\Ubuntu\ext4.vhdx` to 193 GB and filled the 466 GB host F: drive to 542 MB free, causing a reboot that killed a detached download and the queued Stage 3 v2b retrain. Freed ~100 GB inside WSL afterwards (86,524 non-test NIH images, pip/conda/CheXOne-HF caches, both `external_repro` venvs, all `last.pt` checkpoints — `best.pt` kept everywhere). The `.vhdx` does not shrink on its own; host-side compaction is required to return the space to F:.
+16. **A residual labeler false positive** was observed during Stage 3 inspection: `1367_IM-0237-1001` is labelled Pleural Effusion = 1 from *"…no pleural line to suggest pneumothorax or costophrenic blunting to suggest large pleural effusion"* — negation does not reach across "…to suggest". The 2026-09-17 fix covered the dominant coordinated-list pattern, not every scope pattern. Not fixed.
 
 ---
 
@@ -422,10 +424,10 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
 |---|---|---|
 | Stage 1 — contrastive alignment | Done (Phase 3 ×2, v2 ×3 runs) | yes — v2 val R@1 i2t/t2i 0.0439/0.0594 (ep 15), val loss min 4.6745 (ep 7); Phase 3 local_off R@1 0.0174/0.0214 (`runs/align*/…/metrics.csv`) |
 | Stage 2 — classification | Done (v2 image-only is the current model) | yes — **test macro AUROC 0.855 (8 shared) / 0.829 (13 classes)**, val 0.833 (`docs/phase5_artifacts/v2/v2_classification_summary.json`, `runs/classifier_v2/local_on/metrics.csv`) |
-| Stage 3 — report generation | Done — **retrained 2026-09-19 (v2)**; collapse resolved, hallucination issue open | yes — v2 CE macro F1 **0.152** (70 frontal) / 0.119 (150) vs CheXOne 0.149 / 0.107; BLEU-4 9.76, ROUGE-L 0.280 (frontal); 61 distinct / 150; val loss 1.132 (ep 3) (`docs/phase5_artifacts/v2/report_generation_scores_v2.json`) |
+| Stage 3 — report generation | Done — **retrained 2026-09-19 (v2)**; collapse resolved, hallucination issue open; a v2b run (30% abnormal sampling) is prepared (`configs/report_gen_v2b.yaml`) but **not run** — first attempt crashed (cuBLAS, disk-contention), awaiting a GPU window | yes — v2 CE macro F1 **0.152** (70 frontal) / 0.119 (150) vs CheXOne 0.149 / 0.107; BLEU-4 9.76, ROUGE-L 0.280 (frontal); 61 distinct / 150; val loss 1.132 (ep 3) (`docs/phase5_artifacts/v2/report_generation_scores_v2.json`) |
 | Explainability | In progress — attention-weight heatmaps only | no quantitative number; 120 PNGs on disk; qualitative spot-check in `docs/ablation_study.md` |
 | Ablation | Done (local-loss on/off); ASL-vs-BCE not run | yes — Stage 2 macro AUROC 0.8645 vs 0.8648 (text-fusion protocol); Stage 1 R@1 i2t 0.0134 vs 0.0174 (`docs/ablation_study.md`) |
 | External benchmark (RadZero / CheXOne) | Done for RadZero; CheXOne qualitative + one generation run only | yes — RadZero 0.852 (own OpenI subsample), 0.868 (MedXVLM frontal test, corrected labels); CheXOne CE F1 0.105 on 150 MedXVLM images; CheXOne benchmarks: paper-reported only |
-| Cross-dataset | Done in the flipped direction only | yes — RadZero 0.868 vs MedXVLM 0.855 on identical images (`v2_classification_summary.json`); MedXVLM on external data: **no** |
+| Cross-dataset | Done in both directions (flipped 2026-09-06; MedXVLM→NIH 2026-09-20) | yes — RadZero 0.868 vs MedXVLM 0.855 on identical images; **MedXVLM on NIH ChestX-ray14 test split: 0.714** macro AUROC, 8 classes (`chestxray14_external_eval_summary.json`) |
 | Demo app | Not started | no |
 | Version control | Not started (0 commits) | — |
