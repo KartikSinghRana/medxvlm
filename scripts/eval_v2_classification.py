@@ -49,6 +49,7 @@ CKPT = {
     "v2_stage2_image_only": REPO_ROOT / "checkpoints/classifier_v2/local_on/best.pt",
     "v2_stage1": REPO_ROOT / "checkpoints/align_v2/local_on/best.pt",
     "v2_stage1_valloss": REPO_ROOT / "checkpoints/align_v2/local_on_valloss/best.pt",
+    "v3_stage1_sentence": REPO_ROOT / "checkpoints/align_v3/sentence/best.pt",
     "v2_stage1_frozen_text": REPO_ROOT / "checkpoints/align_v2/local_on_frozen_text/best.pt",
     "v2_baseline_imagenet_vit": REPO_ROOT / "checkpoints/baseline_v2/vit_base_patch16_224/best.pt",
     "v2_baseline_xraydinov2_linear": REPO_ROOT / "checkpoints/baseline_v2/xraydinov2/best.pt",
@@ -64,6 +65,20 @@ RADZERO_TO_MEDXVLM = {
 }
 SHARED_CLASSES = list(RADZERO_TO_MEDXVLM.values())
 ZERO_SHOT_PROMPTS = {l: f"There is {l}." if l != "No Finding" else "There is no acute cardiopulmonary abnormality." for l in CHEXPERT_LABELS}
+
+# Prompt ensembling + positive-vs-negative contrast (CheXzero/RadZero-style scoring).
+# score = mean_over_templates( sim(image, positive prompt) - sim(image, negative prompt) )
+POS_TEMPLATES = ("There is {}.", "{} is present.", "Findings consistent with {}.")
+NEG_TEMPLATES = ("There is no {}.", "No {}.", "No evidence of {}.")
+NO_FINDING_POS = ("No acute cardiopulmonary abnormality.", "The lungs are clear.", "Normal chest radiograph.")
+NO_FINDING_NEG = ("Acute cardiopulmonary abnormality.", "There is an abnormality.", "Abnormal chest radiograph.")
+
+
+def _prompt_sets(label: str) -> tuple[list[str], list[str]]:
+    if label == "No Finding":
+        return list(NO_FINDING_POS), list(NO_FINDING_NEG)
+    name = label.lower()
+    return [t.format(name) for t in POS_TEMPLATES], [t.format(name) for t in NEG_TEMPLATES]
 
 
 def load_stage2_image_only(path, device):
@@ -86,7 +101,14 @@ def load_stage2_image_only(path, device):
     return score
 
 
-def load_zero_shot(path, device):
+def load_zero_shot(path, device, mode: str = "pos_only"):
+    """Zero-shot scorer from a Stage 1 checkpoint.
+
+    mode="pos_only": cosine to one "There is {label}." prompt (the Phase 5 protocol).
+    mode="pos_minus_neg": mean over templates of sim(pos) - sim(neg) -- prompt
+    ensembling with an explicit negative, which removes the shared "what a chest
+    X-ray sentence looks like" component that dominates single-prompt cosine.
+    """
     vision_encoder, text_encoder = load_stage1_encoders(path, device)
     state = load_checkpoint(path)["model_state_dict"]
     vision_proj = torch.nn.Linear(vision_encoder.embed_dim, SHARED_EMBED_DIM).to(device)
@@ -95,14 +117,31 @@ def load_zero_shot(path, device):
     text_proj.load_state_dict({k[len("text_proj."):]: v for k, v in state.items() if k.startswith("text_proj.")})
     for m in (vision_encoder, text_encoder, vision_proj, text_proj):
         m.eval()
-    with torch.no_grad():
-        enc = text_encoder.tokenize([ZERO_SHOT_PROMPTS[l] for l in CHEXPERT_LABELS], max_length=64)
+
+    def embed(texts: list[str]) -> torch.Tensor:
+        enc = text_encoder.tokenize(texts, max_length=64)
         enc = {k: v.to(device) for k, v in enc.items()}
-        class_embeds = F.normalize(text_proj(text_encoder(enc["input_ids"], enc["attention_mask"]).pooled), dim=-1)
+        return F.normalize(text_proj(text_encoder(enc["input_ids"], enc["attention_mask"]).pooled), dim=-1)
+
+    with torch.no_grad():
+        if mode == "pos_only":
+            pos = embed([ZERO_SHOT_PROMPTS[l] for l in CHEXPERT_LABELS])  # [14, D]
+            neg = None
+        elif mode == "pos_minus_neg":
+            pos_sets, neg_sets = zip(*(_prompt_sets(l) for l in CHEXPERT_LABELS))
+            n_t = len(pos_sets[0])
+            pos = embed([p for ps in pos_sets for p in ps]).view(len(CHEXPERT_LABELS), n_t, -1)  # [14, T, D]
+            neg = embed([p for ps in neg_sets for p in ps]).view(len(CHEXPERT_LABELS), n_t, -1)
+        else:
+            raise ValueError(mode)
 
     def score(pixel_values):
-        img = F.normalize(vision_proj(vision_encoder(pixel_values).pooled), dim=-1)
-        return img @ class_embeds.t()
+        img = F.normalize(vision_proj(vision_encoder(pixel_values).pooled), dim=-1)  # [B, D]
+        if neg is None:
+            return img @ pos.t()
+        sim_pos = torch.einsum("bd,ctd->bct", img, pos).mean(-1)  # [B, 14]
+        sim_neg = torch.einsum("bd,ctd->bct", img, neg).mean(-1)
+        return sim_pos - sim_neg
     return score
 
 
@@ -163,6 +202,10 @@ def main() -> int:
         "v2_stage2_image_only": load_stage2_image_only,
         "v2_stage1_zero_shot": lambda p, d: load_zero_shot(p, d),
         "v2_stage1_zero_shot_valloss_selected": lambda p, d: load_zero_shot(p, d),
+        "v2_stage1_zero_shot_posneg": lambda p, d: load_zero_shot(p, d, mode="pos_minus_neg"),
+        "phase3_stage1_zero_shot_posneg": lambda p, d: load_zero_shot(p, d, mode="pos_minus_neg"),
+        "v3_stage1_sentence_zero_shot": lambda p, d: load_zero_shot(p, d),
+        "v3_stage1_sentence_zero_shot_posneg": lambda p, d: load_zero_shot(p, d, mode="pos_minus_neg"),
         "v2_stage1_zero_shot_frozen_text": lambda p, d: load_zero_shot(p, d),
         "v2_baseline_imagenet_vit": load_baseline,
         "v2_baseline_xraydinov2_linear": load_baseline,
@@ -172,6 +215,10 @@ def main() -> int:
     ckpt_for = {
         "v2_stage2_image_only": CKPT["v2_stage2_image_only"], "v2_stage1_zero_shot": CKPT["v2_stage1"],
         "v2_stage1_zero_shot_valloss_selected": CKPT["v2_stage1_valloss"],
+        "v2_stage1_zero_shot_posneg": CKPT["v2_stage1"],
+        "phase3_stage1_zero_shot_posneg": CKPT["phase3_stage1"],
+        "v3_stage1_sentence_zero_shot": CKPT["v3_stage1_sentence"],
+        "v3_stage1_sentence_zero_shot_posneg": CKPT["v3_stage1_sentence"],
         "v2_stage1_zero_shot_frozen_text": CKPT["v2_stage1_frozen_text"],
         "v2_baseline_imagenet_vit": CKPT["v2_baseline_imagenet_vit"], "v2_baseline_xraydinov2_linear": CKPT["v2_baseline_xraydinov2_linear"],
         "phase3_stage2_blind": CKPT["phase3_stage2"], "phase3_stage1_zero_shot": CKPT["phase3_stage1"],

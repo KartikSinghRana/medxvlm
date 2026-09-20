@@ -103,6 +103,15 @@ def score(df: pd.DataFrame, truth_cols: list[str], tag: str) -> dict:
 
 
 def main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--extra", action="append", default=[], metavar="NAME=PATH", help="Additional generation CSVs to score.")
+    ap.add_argument("--out", type=Path, default=OUT)
+    args = ap.parse_args()
+    for item in args.extra:
+        name, _, path = item.partition("=")
+        SYSTEMS[name] = Path(path)
+
     man = pd.read_csv(MANIFEST)
     truth_cols = list(CHEXPERT_LABELS)
     for c in truth_cols:
@@ -127,9 +136,9 @@ def main() -> int:
             print(f"{name:18s} {k:11s} n={r['n']:3d} | CE macroF1={r['clinical_efficacy']['macro_f1']:.3f} microF1={r['clinical_efficacy']['micro_f1']:.3f} "
                   f"| BLEU4={r['text']['bleu4']:.2f} ROUGE-L={r['text']['rougeL_f']:.3f} | distinct={r['collapse']['n_distinct']} top1={r['collapse']['top1_share']:.2f} words={r['collapse']['mean_words']:.1f}")
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(results, indent=2))
-    print(f"[done] wrote {OUT}")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(results, indent=2))
+    print(f"[done] wrote {args.out}")
     return 0
 
 

@@ -186,8 +186,12 @@ class ReportGenerator(nn.Module):
         )
 
     @torch.no_grad()
-    def generate(self, pixel_values: torch.Tensor, instruction: str, max_new_tokens: int = 128) -> list[str]:
-        """Greedy-decode a report per image, given one shared instruction for the batch."""
+    def generate(self, pixel_values: torch.Tensor, instruction: str, max_new_tokens: int = 128, **generate_kwargs) -> list[str]:
+        """Decode a report per image, given one shared instruction for the batch.
+
+        Greedy by default; `generate_kwargs` (e.g. `num_beams`, `repetition_penalty`,
+        `no_repeat_ngram_size`) are passed straight to the decoder's `generate`.
+        """
         was_training = self.training
         self.eval()
         device = pixel_values.device
@@ -211,6 +215,7 @@ class ReportGenerator(nn.Module):
             max_new_tokens=max_new_tokens,
             do_sample=False,
             pad_token_id=self.tokenizer.pad_token_id,
+            **generate_kwargs,
         )
         if was_training:
             self.train()

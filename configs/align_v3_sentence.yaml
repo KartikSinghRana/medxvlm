@@ -1,0 +1,35 @@
+# Stage 1 v3: sentence-level, multi-positive contrastive alignment (RadZero-style).
+#
+# Why (docs/v2_rebuild.md §3.3): the report-level Stage 1 could not support a
+# zero-shot classifier (0.48-0.57 AUROC). Two causes it never addressed:
+#  (1) train/test text mismatch -- trained on whole ~37-word, 70%-normal
+#      reports, tested with short prompts ("There is cardiomegaly.");
+#  (2) boilerplate false negatives -- 16,375 training sentences but only
+#      6,263 unique; plain InfoNCE punishes an image for matching a text
+#      identical to its own when it appears elsewhere in the batch.
+# This recipe: one report sentence per image per epoch (text_unit: sentence),
+# identical sentences masked as mutual positives (multi-positive NCE), the
+# XrayDINOv2 tower fine-tuned at a low LR (Phase 3's fine-tuned towers gave a
+# better zero-shot head than v2's frozen one), selection by val loss.
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/align_v3
+log_dir: runs/align_v3
+
+seed: 0
+epochs: 12
+early_stopping_patience: 3
+select_by: val_loss
+batch_size: 32
+num_workers: 4
+lr: 0.00001        # vision + text encoders
+proj_lr: 0.001     # vision_proj / text_proj / logit_scale
+weight_decay: 0.01
+max_text_length: 64
+
+text_unit: sentence
+vision_backbone: xraydinov2
+freeze_vision_encoder: false
+freeze_text_encoder: false
+projections: [Frontal]
+use_local_loss: false
+pretrained: true

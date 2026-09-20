@@ -23,6 +23,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from medxvlm.data.labeler import split_report_sentences
 from medxvlm.models.labels import CHEXPERT_LABELS
 from medxvlm.models.vision_encoder import IMAGE_SIZE
 
@@ -156,6 +157,44 @@ class AlignmentDataset(Dataset):
         image_path = _resolve_image_path(self.manifest_path, row["filename"])
         image = Image.open(image_path).convert("RGB")
         return self.transform(image), row["report_text"]
+
+
+class SentenceAlignmentDataset(Dataset):
+    """Stage 1, sentence level: (image, one randomly drawn sentence of its report) pairs.
+
+    # why: aligning an image with its *whole* report makes the text side a
+    # long, 70%-normal paragraph, nothing like the short prompts zero-shot
+    # classification uses; RadZero aligns images with short finding
+    # sentences instead. One sentence is drawn per image per epoch so the
+    # epoch size (and cost) stays that of the image set, and the returned
+    # sentence text lets the training loop treat identical sentences across
+    # a batch as mutual positives rather than false negatives.
+    """
+
+    def __init__(
+        self,
+        manifest_path: str | Path,
+        split: str,
+        transform: transforms.Compose | None = None,
+        projections: tuple[str, ...] | None = None,
+    ) -> None:
+        self.manifest_path = manifest_path
+        self.rows = _load_split(manifest_path, split, projections)
+        self.sentences = [split_report_sentences(t) or [t] for t in self.rows["report_text"]]
+        self.transform = transform or build_transforms(split)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, str]:
+        row = self.rows.iloc[index]
+        image = Image.open(_resolve_image_path(self.manifest_path, row["filename"])).convert("RGB")
+        # torch's RNG is re-seeded per DataLoader worker and per epoch; a numpy
+        # Generator held on the dataset would be copied into every worker with
+        # identical state and draw the same sentence for an image every epoch.
+        choices = self.sentences[index]
+        sentence = choices[int(torch.randint(len(choices), (1,)).item())]
+        return self.transform(image), sentence
 
 
 class ClassificationDataset(Dataset):

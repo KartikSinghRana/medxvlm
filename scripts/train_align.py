@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from medxvlm.data.dataset import AlignmentDataset  # noqa: E402
+from medxvlm.data.dataset import AlignmentDataset, SentenceAlignmentDataset  # noqa: E402
 from medxvlm.engine.loop_utils import EpochLogger, load_config, save_checkpoint, set_seed  # noqa: E402
 from medxvlm.eval.metrics import retrieval_recall_at_k  # noqa: E402
 from medxvlm.models.alignment import ContrastiveAlignment  # noqa: E402
@@ -47,12 +47,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def make_collate(text_encoder: TextEncoder, max_length: int):
+def _normalise_text(text: str) -> str:
+    return " ".join(text.lower().replace(",", " ").split())
+
+
+def make_collate(text_encoder: TextEncoder, max_length: int, multi_positive: bool = False):
+    """Collate (image, text) pairs; with `multi_positive`, also a `[B, B]` mask of identical texts.
+
+    # why the mask: at sentence level, the same sentence ("The lungs are clear")
+    # recurs many times per batch; those pairs are positives, not negatives.
+    """
+
     def collate(batch):
-        images, reports = zip(*batch)
+        images, texts = zip(*batch)
         pixel_values = torch.stack(images)
-        encoded = text_encoder.tokenize(list(reports), max_length=max_length)
-        return pixel_values, encoded["input_ids"], encoded["attention_mask"]
+        encoded = text_encoder.tokenize(list(texts), max_length=max_length)
+        positive_mask = None
+        if multi_positive:
+            keys = [_normalise_text(t) for t in texts]
+            positive_mask = torch.tensor([[a == b for b in keys] for a in keys], dtype=torch.bool)
+        return pixel_values, encoded["input_ids"], encoded["attention_mask"], positive_mask
 
     return collate
 
@@ -64,11 +78,11 @@ def run_epoch(model: ContrastiveAlignment, loader, device, optimizer=None) -> di
     n_batches = n_local_batches = 0
     all_image_embeds, all_text_embeds = [], []
 
-    for pixel_values, input_ids, attention_mask in loader:
+    for pixel_values, input_ids, attention_mask, positive_mask in loader:
         pixel_values = pixel_values.to(device)
         input_ids, attention_mask = input_ids.to(device), attention_mask.to(device)
         with torch.set_grad_enabled(is_train):
-            output = model(pixel_values, input_ids, attention_mask)
+            output = model(pixel_values, input_ids, attention_mask, positive_mask=positive_mask)
         if is_train:
             optimizer.zero_grad()
             output.loss.backward()
@@ -125,15 +139,19 @@ def main() -> int:
             param.requires_grad = False
 
     projections = tuple(config["projections"]) if config.get("projections") else None
-    collate = make_collate(text_encoder, config["max_text_length"])
+    text_unit = config.get("text_unit", "report")
+    if text_unit not in ("report", "sentence"):
+        raise ValueError(f"text_unit must be 'report' or 'sentence', got {text_unit!r}")
+    dataset_cls = SentenceAlignmentDataset if text_unit == "sentence" else AlignmentDataset
+    collate = make_collate(text_encoder, config["max_text_length"], multi_positive=(text_unit == "sentence"))
     manifest = REPO_ROOT / config["manifest"]
     train_loader = DataLoader(
-        AlignmentDataset(manifest, "train", projections=projections),
+        dataset_cls(manifest, "train", projections=projections),
         batch_size=config["batch_size"], shuffle=True, num_workers=config["num_workers"],
         drop_last=True, collate_fn=collate,
     )
     val_loader = DataLoader(
-        AlignmentDataset(manifest, "val", projections=projections),
+        dataset_cls(manifest, "val", projections=projections),
         batch_size=config["batch_size"], shuffle=False, num_workers=config["num_workers"], collate_fn=collate,
     )
 
@@ -151,7 +169,7 @@ def main() -> int:
     )
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(
-        f"Device: {device} | backbone: {vision_backbone} | projections: {projections} | "
+        f"Device: {device} | backbone: {vision_backbone} | projections: {projections} | text_unit: {text_unit} | "
         f"freeze_vision: {config.get('freeze_vision_encoder', False)} | freeze_text: {config.get('freeze_text_encoder', False)} | use_local_loss: {config['use_local_loss']} | "
         f"epochs: {config['epochs']} | batch_size: {config['batch_size']} | train pairs: {len(train_loader.dataset)} | "
         f"trainable params: {n_trainable/1e6:.1f}M"
@@ -160,6 +178,8 @@ def main() -> int:
     logger = EpochLogger(log_dir)
     best_recall1 = -1.0
     best_val_loss = float("inf")
+    patience = config.get("early_stopping_patience", 0)
+    epochs_since_best = 0
     start = time.time()
 
     for epoch in range(1, config["epochs"] + 1):
@@ -183,7 +203,13 @@ def main() -> int:
         if improved:
             best_recall1 = max(best_recall1, mean_recall1)
             best_val_loss = min(best_val_loss, val_metrics["loss"])
+            epochs_since_best = 0
             save_checkpoint(output_dir / "best.pt", model, {"epoch": epoch, "config": config, "val_recall@1_mean": mean_recall1, "val_loss": val_metrics["loss"], "select_by": select_by})
+        else:
+            epochs_since_best += 1
+            if patience and epochs_since_best >= patience:
+                print(f"Early stopping: no {select_by} improvement for {patience} epochs.")
+                break
 
     logger.close()
     print(f"Done in {(time.time() - start) / 60:.1f} min. select_by={select_by} | best val recall@1 (mean): {best_recall1:.4f} | best val loss: {best_val_loss:.4f}. Checkpoints in {output_dir}")

@@ -64,7 +64,12 @@ def main() -> int:
     ap.add_argument("--max-new-tokens", type=int, default=128)
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--out", type=Path, default=OUT_DIR / "medxvlm_stage3_v2_generations.csv")
+    ap.add_argument("--num-beams", type=int, default=1)
+    ap.add_argument("--repetition-penalty", type=float, default=1.0)
+    ap.add_argument("--no-repeat-ngram-size", type=int, default=0)
+    ap.add_argument("--limit", type=int, default=None, help="Smoke-test only: first N images.")
     args = ap.parse_args()
+    decode_kwargs = {"num_beams": args.num_beams, "repetition_penalty": args.repetition_penalty, "no_repeat_ngram_size": args.no_repeat_ngram_size}
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -73,6 +78,9 @@ def main() -> int:
     manifest = pd.read_csv(MANIFEST)[["filename", "projection", "report_text"]]
     rows = sub[["filename"]].merge(manifest, on="filename", how="left", validate="one_to_one")
     assert rows.report_text.notna().all()
+    if args.limit:
+        rows = rows.head(args.limit)
+    print(f"[info] decoding: {decode_kwargs}")
     print(f"[info] {len(rows)} images: {rows.projection.value_counts().to_dict()}")
 
     model, _config = build_report_generator(args.checkpoint, device)
@@ -83,7 +91,7 @@ def main() -> int:
     for start in range(0, len(rows), args.batch_size):
         batch = rows.iloc[start : start + args.batch_size]
         pixel_values = torch.stack([transform(Image.open(IMAGES_DIR / f).convert("RGB")) for f in batch.filename]).to(device)
-        generated.extend(model.generate(pixel_values, DEFAULT_REPORT_INSTRUCTION, max_new_tokens=args.max_new_tokens))
+        generated.extend(model.generate(pixel_values, DEFAULT_REPORT_INSTRUCTION, max_new_tokens=args.max_new_tokens, **decode_kwargs))
         print(f"[progress] {min(start + args.batch_size, len(rows))}/{len(rows)}, {time.time() - t0:.0f}s", flush=True)
 
     out = pd.DataFrame({

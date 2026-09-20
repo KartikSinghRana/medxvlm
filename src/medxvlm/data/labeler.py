@@ -165,6 +165,32 @@ def _split_sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENTENCE_SPLIT_RE.split(text) if s.strip()]
 
 
+_LEADING_ENUM_RE = re.compile(r"^\s*(\d+[.)]\s*)+")
+
+
+def split_report_sentences(text: str, min_words: int = 3) -> list[str]:
+    """Report -> list of clean, de-duplicated sentences suitable as contrastive text units.
+
+    # why: the sentence-level Stage 1 (RadZero-style) aligns an image with
+    # each *sentence* of its report rather than the whole report, so the
+    # training text distribution matches the short prompts used for
+    # zero-shot classification ("There is cardiomegaly."). Enumeration
+    # prefixes ("1. ") and fragments under `min_words` carry no findings.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for sentence in _split_sentences(text):
+        sentence = _LEADING_ENUM_RE.sub("", sentence).strip()
+        if len(sentence.split()) < min_words:
+            continue
+        key = sentence.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(sentence)
+    return out
+
+
 def _split_clauses(sentence: str) -> list[_Clause]:
     """Split one sentence into clauses at scope-breaking conjunctions.
 

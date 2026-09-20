@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--run-name", type=str, default=None, help="Subdirectory under output_dir/log_dir (defaults to the stage1 checkpoint's parent dir name).")
+    parser.add_argument("--seed", type=int, default=None, help="Override config seed (used for the seed ensemble).")
     return parser.parse_args()
 
 
@@ -127,7 +128,7 @@ def save_epoch_snapshot(model: Stage2Model, loader, device, snapshot_dir: Path, 
 
 def main() -> int:
     args = parse_args()
-    config = load_config(args.config, {"epochs": args.epochs, "batch_size": args.batch_size})
+    config = load_config(args.config, {"epochs": args.epochs, "batch_size": args.batch_size, "seed": args.seed})
     stage1_checkpoint = args.stage1_checkpoint or (REPO_ROOT / config["stage1_checkpoint"])
     run_name = args.run_name or Path(stage1_checkpoint).parent.name
 

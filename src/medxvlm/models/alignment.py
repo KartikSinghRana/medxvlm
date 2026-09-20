@@ -80,13 +80,25 @@ class ContrastiveAlignment(nn.Module):
         pixel_values: torch.Tensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
+        positive_mask: torch.Tensor | None = None,
     ) -> AlignmentOutput:
+        """`positive_mask` (`[B, B]` bool, optional): which (image i, text j) pairs count as positives.
+
+        # why: with sentence-level text units, identical sentences recur many
+        # times per batch ("The lungs are clear" ~9% of all sentences), so the
+        # plain diagonal InfoNCE would push an image away from a text that is
+        # word-for-word its own. Callers pass the mask of identical texts; the
+        # loss then follows RadZero's multi-positive NCE (their eq. 1/2).
+        """
         vision_out = self.vision_encoder(pixel_values)
         text_out = self.text_encoder(input_ids, attention_mask)
         image_embeds = F.normalize(self.vision_proj(vision_out.pooled), dim=-1)
         text_embeds = F.normalize(self.text_proj(text_out.pooled), dim=-1)
 
-        global_loss = self._global_infonce_loss(image_embeds, text_embeds)
+        if positive_mask is None:
+            global_loss = self._global_infonce_loss(image_embeds, text_embeds)
+        else:
+            global_loss = self._multi_positive_infonce_loss(image_embeds, text_embeds, positive_mask)
         local_loss = None
         loss = global_loss
         if self.use_local_loss:
@@ -107,6 +119,21 @@ class ContrastiveAlignment(nn.Module):
             global_loss=global_loss,
             local_loss=local_loss,
         )
+
+    def _multi_positive_infonce_loss(
+        self, image_embeds: torch.Tensor, text_embeds: torch.Tensor, positive_mask: torch.Tensor
+    ) -> torch.Tensor:
+        """Symmetric multi-positive NCE: -log( sum_{j in P(i)} e^{l_ij} / sum_j e^{l_ij} ), averaged both ways."""
+        logits = self.logit_scale.exp() * image_embeds @ text_embeds.t()  # [B_img, B_txt]
+        mask = positive_mask.to(logits.device)
+        mask = mask | torch.eye(mask.shape[0], dtype=torch.bool, device=logits.device)  # own pair is always positive
+
+        def one_direction(lg: torch.Tensor, m: torch.Tensor) -> torch.Tensor:
+            log_denominator = torch.logsumexp(lg, dim=1)
+            log_numerator = torch.logsumexp(lg.masked_fill(~m, float("-inf")), dim=1)
+            return (log_denominator - log_numerator).mean()
+
+        return (one_direction(logits, mask) + one_direction(logits.t(), mask.t())) / 2
 
     def _global_infonce_loss(self, image_embeds: torch.Tensor, text_embeds: torch.Tensor) -> torch.Tensor:
         """Symmetric InfoNCE: each sample's own image/text pair is the positive."""
