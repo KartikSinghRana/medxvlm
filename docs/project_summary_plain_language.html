@@ -66,7 +66,7 @@
     <div class="badge">Compared Against 2 Published AI Models</div>
     <div class="badge">Rebuilt &amp; Re-tested Honestly</div>
   </div>
-  <div class="meta">Prepared 2026-09-19 (updated after the Stage 3 retrain) &nbsp;·&nbsp; Kartik Singh Rana</div>
+  <div class="meta">Prepared 2026-09-20 (updated after the overnight ensemble / decoding / zero-shot runs) &nbsp;·&nbsp; Kartik Singh Rana</div>
 </div>
 
 <section>
@@ -112,13 +112,14 @@
 
 <div class="bar-wrap">
   <div class="bar-row"><div class="bar-label">Original model, image only</div><div class="bar-track"><div class="bar-fill grey" style="width:57.2%"></div><div class="chance-line"></div></div><div class="bar-value">57%</div></div>
-  <div class="bar-row"><div class="bar-label">Rebuilt model, image only</div><div class="bar-track"><div class="bar-fill green" style="width:85.5%"></div><div class="chance-line"></div></div><div class="bar-value">86%</div></div>
+  <div class="bar-row"><div class="bar-label">Rebuilt model, one training run</div><div class="bar-track"><div class="bar-fill green" style="width:83.7%"></div><div class="chance-line"></div></div><div class="bar-value">84%</div></div>
+  <div class="bar-row"><div class="bar-label">Rebuilt model, 4 runs averaged</div><div class="bar-track"><div class="bar-fill green" style="width:86.8%"></div><div class="chance-line"></div></div><div class="bar-value">87%</div></div>
   <div class="bar-row"><div class="bar-label">RadZero (outside AI, same images)</div><div class="bar-track"><div class="bar-fill" style="width:86.8%"></div><div class="chance-line"></div></div><div class="bar-value">87%</div></div>
 </div>
-<p class="footnote">All three bars: the same 377 never-seen-before front-view test X-rays, the same corrected labels, no hint to anyone. Averaged over the 8 conditions shared with RadZero; over all 13 measurable conditions the rebuilt model scores 83%.</p>
+<p class="footnote">All bars: the same 377 never-seen-before front-view test X-rays, the same corrected labels, no hint to anyone. Averaged over the 8 conditions shared with RadZero. "One training run" is the average of four runs with different random seeds (84% ± 1.5); an earlier version of this document quoted 86% for a single run, which turned out to be the luckiest of the four.</p>
 
 <div class="callout good">
-<b>This is the number to quote: 86% (0.855 AUROC), measured fairly</b> — within 1 point of RadZero, a published system trained on roughly 100× more data. Most of the recovery came from cleaning the labels, front views and the X-ray-specific encoder; the project's own attention-based design adds a further 5–8 points over a plain classifier on the same data (78–80%).
+<b>The numbers to quote: 84% ± 1.5 for a single model, 87% (0.868 AUROC) when four independently-trained copies are averaged — the same score as RadZero, a published system trained on roughly 100× more data, on identical images.</b> Averaging several models is a standard, honest technique; it also makes the model slightly better on X-rays from a different hospital (72% vs 70%). Most of the recovery came from cleaning the labels, front views and the X-ray-specific encoder; the project's own attention-based design adds a further 5–8 points over a plain classifier on the same data (78–80%).
 </div>
 </section>
 
@@ -139,15 +140,16 @@
 
 <table>
 <tr><th>System (same 70 front-view test X-rays)</th><th class="num">Clinical-efficacy score</th><th class="num">Different reports produced (of 150)</th><th class="num">Invents catheters / lines that aren't there</th></tr>
-<tr><td><b>MedXVLM, retrained</b></td><td class="num"><b>0.152</b></td><td class="num">61</td><td class="num">10% of cases</td></tr>
-<tr><td>CheXOne (outside AI, off-the-shelf)</td><td class="num">0.149</td><td class="num">87</td><td class="num">0%</td></tr>
-<tr><td>MedXVLM, original</td><td class="num">0.078</td><td class="num">5</td><td class="num">1%</td></tr>
+<tr><td><b>MedXVLM, retrained — beam-search decoding</b></td><td class="num"><b>0.176</b></td><td class="num">14 (of 70 front views)</td><td class="num">3% of cases</td></tr>
+<tr><td>MedXVLM, retrained — plain (greedy) decoding</td><td class="num">0.152</td><td class="num">26 (of 70)</td><td class="num">10% of cases</td></tr>
+<tr><td>CheXOne (outside AI, off-the-shelf)</td><td class="num">0.149</td><td class="num">36 (of 70)</td><td class="num">0%</td></tr>
+<tr><td>MedXVLM, original</td><td class="num">0.078</td><td class="num">5 (of 70)</td><td class="num">1%</td></tr>
 </table>
 
-<p><b>The good:</b> the collapse is fixed, the score roughly doubled, and on this measure the project's model is now <b>level with CheXOne</b> — a 3-billion-parameter system from a Stanford lab. It now correctly writes "Cardiomegaly" for enlarged hearts the old model always called normal.</p>
+<p><b>The good:</b> the collapse is fixed, the score more than doubled, and on this measure the project's model now <b>edges ahead of CheXOne</b> — a 3-billion-parameter system from a Stanford lab. It correctly writes "Cardiomegaly" for enlarged hearts the old model always called normal. A follow-up experiment found that <b>how the text is decoded matters as much as how the model was trained</b>: switching from picking the single most likely next word ("greedy") to considering several candidate sentences at once ("beam search") cut the invented-equipment problem from 10% to 3% and raised the score to 0.176 — with no retraining. A separate test that reduced the "show abnormal cases more often" setting made the model collapse completely again (one identical sentence for all 150 images), which proves that setting was essential.</p>
 
 <div class="callout warn">
-<b>The honest new problem:</b> in about 1 in 10 front-view cases the retrained model <b>invents medical equipment or surgery that isn't in the image</b> — "IJ catheter tip at the SVC", "surgical clips from prior lobectomy". This happened because abnormal training reports mention lines and tubes four times more often than normal ones, so when we forced the model to pay attention to abnormal cases it learned "abnormal ⇒ mention a catheter" as a shortcut. CheXOne never does this. So the retrain traded one failure (always saying normal) for a smaller but more dangerous one (making things up). Neither model is anywhere near usable for real report drafting on ~3,000 training studies; a score of 0.15 means most specific findings are still missed.
+<b>The honest remaining problem:</b> in about 1 in 30 front-view cases (1 in 10 with plain decoding) the retrained model <b>invents medical equipment or surgery that isn't in the image</b> — "IJ catheter tip at the SVC", "surgical clips from prior lobectomy". This happened because abnormal training reports mention lines and tubes four times more often than normal ones, so when we forced the model to pay attention to abnormal cases it learned "abnormal ⇒ mention a catheter" as a shortcut. CheXOne never does this. So the retrain traded one failure (always saying normal) for a smaller but more dangerous one (making things up), which better decoding then mostly contained. Neither model is anywhere near usable for real report drafting on ~3,000 training studies; a score of 0.18 means most specific findings are still missed, and the model still gives the same "normal" paragraph for about 6 in 10 front-view images.
 </div>
 
 <p class="footnote">Two traditional text-similarity scores (BLEU, ROUGE) were also computed and slightly favour the <i>original, collapsed</i> model — because its boilerplate happens to match the most common reference wording. That is a known weakness of those metrics for radiology reports, which is why the clinical-efficacy score is used to rank the systems here.</p>
@@ -162,12 +164,13 @@
 
 <table>
 <tr><th>Task</th><th>Outside system</th><th class="num">Its score</th><th class="num">MedXVLM (rebuilt)</th><th>Same images &amp; labels?</th></tr>
-<tr><td>Spotting diseases (AUROC, 8 shared conditions, 377 test X-rays)</td><td>RadZero</td><td class="num">87%</td><td class="num">86%</td><td>Yes — fair comparison</td></tr>
-<tr><td>Writing reports (clinical-efficacy, 70 front-view test X-rays)</td><td>CheXOne</td><td class="num">0.149</td><td class="num">0.152</td><td>Yes — fair comparison</td></tr>
+<tr><td>Spotting diseases (AUROC, 8 shared conditions, 377 test X-rays)</td><td>RadZero</td><td class="num">87%</td><td class="num">87% (4-model average); 84% ± 1.5 single</td><td>Yes — fair comparison</td></tr>
+<tr><td>Writing reports (clinical-efficacy, 70 front-view test X-rays)</td><td>CheXOne</td><td class="num">0.149</td><td class="num">0.176</td><td>Yes — fair comparison</td></tr>
+<tr><td>Describing a disease in words and matching it to an image ("zero-shot", no labels used)</td><td>RadZero</td><td class="num">87%</td><td class="num">73%</td><td>Yes, but RadZero trained on ~100× more text</td></tr>
 </table>
 
 <div class="callout good">
-Both outside systems were <b>actually run</b> on this project's test images — these are real measured numbers, not copied from their papers. The reverse (running MedXVLM on <i>their</i> benchmark datasets) was not possible: those datasets require credentialed hospital-data access. Being within a point of RadZero and level with CheXOne, on ~100× less training data, is a strong result for a project of this size — but note the report-writing tie comes with the hallucination caveat above, and both report scores are low in absolute terms.
+Both outside systems were <b>actually run</b> on this project's test images — these are real measured numbers, not copied from their papers. The reverse (running MedXVLM on <i>their</i> benchmark datasets) was not possible: those datasets require credentialed hospital-data access. Matching RadZero (with a 4-model average) and edging past CheXOne, on ~100× less training data, is a strong result for a project of this size — but note both report scores are low in absolute terms, and the "zero-shot" row shows where the data gap really bites: describing a finding in words and matching it to an image reached 73% only after training specifically on the 1,683 sentences that mention a finding; RadZero has hundreds of thousands.
 </div>
 </section>
 
@@ -177,14 +180,14 @@ Both outside systems were <b>actually run</b> on this project's test images — 
 <li><b>The full 3-stage pipeline is built, trained on real data, and runs end-to-end</b> — nothing here is simulated or estimated.</li>
 <li><b>The first headline number (87%) was misleading</b> — measured with the answer key; the honest image-only score was 51%. Catching this by testing the hard way is one of the project's most important outcomes.</li>
 <li><b>Root causes were found and fixed</b>: a label-reading bug that mislabelled thousands of normal X-rays, a training setup that leaked the answer, side-view images diluting the data, a non-specialised image encoder — and, for report writing, a "safe answer" collapse.</li>
-<li><b>After the rebuild:</b> disease-spotting at <b>86%</b> (1 point behind RadZero); report-writing clinical-efficacy <b>0.152, level with CheXOne</b>; both on identical test images with identical corrected labels.</li>
-<li><b>Open problems, stated plainly:</b> the report writer invents equipment in ~10% of cases; it still misses most specific abnormal findings; and after the label fix some conditions have very few true test cases (one pneumothorax, five consolidations), so their individual scores are not meaningful.</li>
+<li><b>After the rebuild and the overnight follow-ups:</b> disease-spotting at <b>84% ± 1.5 per model, 87% averaged over four — equal to RadZero</b>; report-writing clinical-efficacy <b>0.176, ahead of CheXOne's 0.149</b>; both on identical test images with identical corrected labels. An earlier single-run figure of 86% was the best of four seeds and should not be quoted alone.</li>
+<li><b>Open problems, stated plainly:</b> the report writer still gives the same "normal" paragraph for ~6 in 10 front-view images and invents equipment in ~3%; it misses most specific abnormal findings; zero-shot matching sits at 73% vs 87% for RadZero (a data-scale gap); and after the label fix some conditions have very few true test cases (one pneumothorax, five consolidations), so their individual scores are not meaningful.</li>
 </ul>
 
 <h3>What would come next</h3>
 <ol>
-<li>Fix the report writer's hallucination — e.g. show abnormal cases less aggressively during training (30% rather than 50%), or penalise mentions of devices the image doesn't support — then re-score.</li>
-<li>Test the disease classifier on a second, public hospital dataset (e.g. NIH ChestX-ray14) to see how it generalises beyond Indiana.</li>
+<li>Attack the report writer's remaining collapse: give it the classifier's findings as part of its instructions ("findings-conditioned" generation), and select checkpoints by generation quality rather than training loss (the loss favoured the collapsed model).</li>
+<li>The external-hospital test is done (NIH ChestX-ray14: 71% single model, 72% averaged); a further step would be a second external dataset with different labelling.</li>
 <li>Get more true examples of the rare conditions so their individual scores become meaningful.</li>
 </ol>
 </section>

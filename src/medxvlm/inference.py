@@ -14,6 +14,7 @@ models were validated with (CLAHE -> resize -> ImageNet normalisation).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,7 +32,15 @@ from medxvlm.models.vision_encoder import VisionEncoder, infer_backbone_from_sta
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CLASSIFIER_CHECKPOINT = REPO_ROOT / "checkpoints" / "classifier_v2" / "local_on" / "best.pt"
+# The 4-seed ensemble (docs/v2_rebuild.md §3.6.1): 0.868 macro AUROC vs 0.837 +- 0.015 for any
+# single seed. Each member is ~0.35 GB of VRAM, so four cost less than the report decoder.
+DEFAULT_CLASSIFIER_ENSEMBLE = tuple(
+    REPO_ROOT / "checkpoints" / "classifier_v2" / run / "best.pt" for run in ("local_on", "seed1", "seed2", "seed3")
+)
 DEFAULT_REPORT_CHECKPOINT = REPO_ROOT / "checkpoints" / "report_gen_v2" / "best.pt"
+# Beam search + mild repetition penalty: CE F1 0.152 -> 0.176 and device hallucination
+# 10% -> 3% on the same checkpoint (docs/v2_rebuild.md §3.6.2). Greedy was the wrong default.
+DEFAULT_DECODING = {"num_beams": 3, "repetition_penalty": 1.2}
 
 
 @dataclass
@@ -39,9 +48,10 @@ class ClassificationResult:
     """Per-label probabilities plus the attention map each probability was pooled from."""
 
     probabilities: dict[str, float]
-    attention_weights: torch.Tensor  # [num_labels, num_patches], CPU
+    attention_weights: torch.Tensor  # [num_labels, num_patches], CPU (mean over ensemble members)
     pixel_values: torch.Tensor  # [3, H, W], the normalised tensor the model saw, CPU
-    checkpoint: str
+    checkpoint: str  # comma-separated when an ensemble was used
+    n_models: int = 1
 
     def ranked(self) -> list[tuple[str, float]]:
         return sorted(self.probabilities.items(), key=lambda kv: kv[1], reverse=True)
@@ -56,6 +66,7 @@ class ReportResult:
     text: str
     checkpoint: str
     max_new_tokens: int
+    decoding: dict = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)  # honesty flags for the UI, e.g. device-mention warning
 
 
@@ -72,7 +83,7 @@ def _flag_report(text: str) -> list[str]:
     if any(term in lowered for term in _DEVICE_TERMS):
         flags.append(
             "Mentions a support device or surgical change. The v2 generator hallucinated such mentions in "
-            "10% of held-out frontal cases (27% on lateral views) -- verify against the image before trusting."
+            "10% of held-out frontal cases with greedy decoding (3% with the default beam search) -- verify against the image before trusting."
         )
     return flags
 
@@ -83,15 +94,24 @@ class MedXVLMPipeline:
     def __init__(
         self,
         device: str | torch.device | None = None,
-        classifier_checkpoint: str | Path = DEFAULT_CLASSIFIER_CHECKPOINT,
+        classifier_checkpoints: Sequence[str | Path] = DEFAULT_CLASSIFIER_ENSEMBLE,
         report_checkpoint: str | Path | None = DEFAULT_REPORT_CHECKPOINT,
         load_report_generator: bool = False,
     ) -> None:
+        """`classifier_checkpoints`: one path = single model; several = probability-averaged ensemble.
+        Members that are missing on disk are skipped with a note in `classifier_meta["skipped"]`."""
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.transform = build_transforms("test")
-        self.classifier_checkpoint = Path(classifier_checkpoint)
+        paths = [Path(p) for p in classifier_checkpoints]
+        present = [p for p in paths if p.exists()]
+        if not present:
+            raise FileNotFoundError(f"No classifier checkpoint found among {paths}")
+        self.classifier_checkpoints = present
+        self.classifier_checkpoint = present[0]  # kept for callers that expect a single path
         self.report_checkpoint = Path(report_checkpoint) if report_checkpoint else None
-        self.vision_encoder, self.head, self.classifier_meta = self._load_classifier(self.classifier_checkpoint)
+        self.classifiers = [self._load_classifier(p) for p in present]
+        self.vision_encoder, self.head, self.classifier_meta = self.classifiers[0]
+        self.classifier_meta = dict(self.classifier_meta, n_models=len(present), skipped=[str(p) for p in paths if p not in present])
         self.report_generator: ReportGenerator | None = None
         self.report_meta: dict = {}
         if load_report_generator:
@@ -159,25 +179,35 @@ class MedXVLMPipeline:
     @torch.no_grad()
     def classify(self, image: Image.Image) -> ClassificationResult:
         pixel_values = self.preprocess(image)
-        out = self.head(self.vision_encoder(pixel_values.unsqueeze(0).to(self.device)).patch_tokens, text_embeds=None)
-        probs = torch.sigmoid(out.logits)[0].cpu()
+        batch = pixel_values.unsqueeze(0).to(self.device)
+        probs_sum, attn_sum = None, None
+        for vision, head, _meta in self.classifiers:
+            out = head(vision(batch).patch_tokens, text_embeds=None)
+            p, a = torch.sigmoid(out.logits)[0].cpu(), out.attention_weights[0].cpu()
+            probs_sum = p if probs_sum is None else probs_sum + p
+            attn_sum = a if attn_sum is None else attn_sum + a
+        n = len(self.classifiers)
+        probs, attn = probs_sum / n, attn_sum / n
         return ClassificationResult(
             probabilities={label: float(probs[i]) for i, label in enumerate(CHEXPERT_LABELS)},
-            attention_weights=out.attention_weights[0].cpu(),
+            attention_weights=attn,
             pixel_values=pixel_values,
-            checkpoint=str(self.classifier_checkpoint.relative_to(REPO_ROOT)),
+            checkpoint=", ".join(str(p.relative_to(REPO_ROOT)) for p in self.classifier_checkpoints),
+            n_models=n,
         )
 
     @torch.no_grad()
-    def generate_report(self, image: Image.Image, max_new_tokens: int = 128) -> ReportResult:
+    def generate_report(self, image: Image.Image, max_new_tokens: int = 128, decoding: dict | None = None) -> ReportResult:
         if self.report_generator is None:
             self.load_report_generator()
         assert self.report_generator is not None, "no report checkpoint configured"
+        decoding = DEFAULT_DECODING if decoding is None else decoding
         pixel_values = self.preprocess(image).unsqueeze(0).to(self.device)
-        text = self.report_generator.generate(pixel_values, DEFAULT_REPORT_INSTRUCTION, max_new_tokens=max_new_tokens)[0].strip()
+        text = self.report_generator.generate(pixel_values, DEFAULT_REPORT_INSTRUCTION, max_new_tokens=max_new_tokens, **decoding)[0].strip()
         return ReportResult(
             text=text,
             checkpoint=str(self.report_checkpoint.relative_to(REPO_ROOT)),
             max_new_tokens=max_new_tokens,
+            decoding=dict(decoding),
             flags=_flag_report(text),
         )

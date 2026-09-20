@@ -396,6 +396,116 @@
         "Pleural Effusion"
       ]
     },
+    "v3b_stage1_findings_zero_shot": {
+      "per_class_auroc": {
+        "No Finding": 0.22850198548541692,
+        "Enlarged Cardiomediastinum": null,
+        "Cardiomegaly": 0.7409579667644184,
+        "Lung Opacity": 0.5839374555792466,
+        "Lung Lesion": 0.5766908212560387,
+        "Edema": 0.7267123287671233,
+        "Consolidation": 0.7333333333333334,
+        "Pneumonia": 0.7205284552845529,
+        "Atelectasis": 0.662512218963832,
+        "Pneumothorax": 0.9920212765957447,
+        "Pleural Effusion": 0.7506445672191528,
+        "Pleural Other": 0.4563279857397504,
+        "Fracture": 0.6937669376693767,
+        "Support Devices": 0.6107723577235773
+      },
+      "per_class_positive_support": {
+        "No Finding": 268,
+        "Enlarged Cardiomediastinum": 0,
+        "Cardiomegaly": 36,
+        "Lung Opacity": 42,
+        "Lung Lesion": 9,
+        "Edema": 12,
+        "Consolidation": 5,
+        "Pneumonia": 8,
+        "Atelectasis": 36,
+        "Pneumothorax": 1,
+        "Pleural Effusion": 15,
+        "Pleural Other": 3,
+        "Fracture": 8,
+        "Support Devices": 8
+      },
+      "macro_auroc_all_valid_classes": 0.6520544377216588,
+      "n_valid_classes": 13,
+      "macro_auroc_8_shared_classes": 0.7338851508554309,
+      "n_valid_shared": 8,
+      "macro_auroc_classes_with_ge10_positives": 0.6155444204631983,
+      "classes_with_ge10_positives": [
+        "No Finding",
+        "Cardiomegaly",
+        "Lung Opacity",
+        "Edema",
+        "Atelectasis",
+        "Pleural Effusion"
+      ],
+      "macro_auroc_shared_classes_with_ge10_positives": 0.6929529074587546,
+      "shared_classes_with_ge10_positives": [
+        "Cardiomegaly",
+        "Lung Opacity",
+        "Edema",
+        "Atelectasis",
+        "Pleural Effusion"
+      ]
+    },
+    "v3b_stage1_findings_zero_shot_posneg": {
+      "per_class_auroc": {
+        "No Finding": 0.5948925099274271,
+        "Enlarged Cardiomediastinum": null,
+        "Cardiomegaly": 0.48061257738677093,
+        "Lung Opacity": 0.7160625444207535,
+        "Lung Lesion": 0.42602657004830913,
+        "Edema": 0.24018264840182652,
+        "Consolidation": 0.7946236559139785,
+        "Pneumonia": 0.755420054200542,
+        "Atelectasis": 0.5608504398826979,
+        "Pneumothorax": 0.9095744680851063,
+        "Pleural Effusion": 0.5552486187845305,
+        "Pleural Other": 0.5026737967914439,
+        "Fracture": 0.6185636856368564,
+        "Support Devices": 0.4796747967479674
+      },
+      "per_class_positive_support": {
+        "No Finding": 268,
+        "Enlarged Cardiomediastinum": 0,
+        "Cardiomegaly": 36,
+        "Lung Opacity": 42,
+        "Lung Lesion": 9,
+        "Edema": 12,
+        "Consolidation": 5,
+        "Pneumonia": 8,
+        "Atelectasis": 36,
+        "Pneumothorax": 1,
+        "Pleural Effusion": 15,
+        "Pleural Other": 3,
+        "Fracture": 8,
+        "Support Devices": 8
+      },
+      "macro_auroc_all_valid_classes": 0.5872620281714007,
+      "n_valid_classes": 13,
+      "macro_auroc_8_shared_classes": 0.6045643795998855,
+      "n_valid_shared": 8,
+      "macro_auroc_classes_with_ge10_positives": 0.5246415564673345,
+      "classes_with_ge10_positives": [
+        "No Finding",
+        "Cardiomegaly",
+        "Lung Opacity",
+        "Edema",
+        "Atelectasis",
+        "Pleural Effusion"
+      ],
+      "macro_auroc_shared_classes_with_ge10_positives": 0.5105913657753158,
+      "shared_classes_with_ge10_positives": [
+        "Cardiomegaly",
+        "Lung Opacity",
+        "Edema",
+        "Atelectasis",
+        "Pleural Effusion"
+      ]
+    },
     "v2_stage1_zero_shot_frozen_text": {
       "per_class_auroc": {
         "No Finding": 0.5141380254689853,

@@ -10,9 +10,10 @@ on top of that shared representation, with explainability tooling
 **Status: Phases 1–5 complete plus a post-Phase-5 rebuild (v2).** All
 three stages are implemented, trained, and evaluated against two published
 external models on identical held-out images. Current honest headline
-numbers: image-only disease classification **0.855 macro AUROC** (RadZero on
-the same images: 0.868); report generation clinical-efficacy F1 **0.152**
-(CheXOne: 0.149), with a documented 10% device-hallucination rate. See
+numbers: image-only disease classification **0.837 ± 0.015 macro AUROC per
+seed, 0.868 for the 4-seed ensemble** (RadZero on the same images: 0.868);
+report generation clinical-efficacy F1 **0.176** with beam decoding (CheXOne:
+0.149), device hallucination 3%; prompt-based zero-shot 0.734 (secondary). See
 [Project status](#project-status), [docs/status_report.md](docs/status_report.md)
 for every number's source, and [docs/v2_rebuild.md](docs/v2_rebuild.md) for
 what changed and why.
@@ -139,7 +140,7 @@ report and true labels alongside when the image comes from the test split.
 PYTHONPATH=src streamlit run app/app.py
 ```
 
-- The classifier loads on start (~0.4 GB VRAM). Report generation is **off by
+- The 4-seed ensemble classifier loads on start (~1.4 GB VRAM); reports use beam-3 decoding by default. Report generation is **off by
   default** (toggle in the sidebar; loads the 1.5B decoder, ~7 GB VRAM).
 - Every screen states the measured numbers and the known failure modes
   (thin-support classes are greyed out; device mentions in generated text are
@@ -197,11 +198,14 @@ PYTHONPATH=src streamlit run app/app.py
   direction because their benchmarks need credentialed data).
 - v2 rebuild: fixed a labeler negation bug (pneumothorax prevalence
   10% → 0.8%), retrained Stage 2 image-only on a CXR-pretrained encoder
-  (**0.855** test macro AUROC vs RadZero 0.868, same images/labels), retrained
-  Stage 3 (collapse fixed: 5 → 61 distinct outputs; CE F1 0.152 vs CheXOne
-  0.149; new 10% hallucination issue open).
+  (**0.837 ± 0.015** per seed, **0.868 ensemble** vs RadZero 0.868, same
+  images/labels), retrained Stage 3 (collapse fixed: 5 → 61 distinct outputs;
+  CE F1 0.176 with beam decoding vs CheXOne 0.149; 3% hallucination).
+- Overnight 2026-09-20 (`docs/v2_rebuild.md` §3.6): seed ensemble, decoding
+  sweep, v2b ablation (30% oversampling collapses), zero-shot v3/v3b
+  (finding-sentence training: 0.57 → 0.734).
 
-Known open items: Stage 3 device hallucination; zero-shot head does not work
-at this data scale (documented negative result); some test classes have
+Known open items: Stage 3 residual collapse (61% modal output with beam search); zero-shot head
+at 0.734 is data-scale-limited (13 points behind RadZero); some test classes have
 single-digit positives after the label fix.
 Full list: [docs/status_report.md](docs/status_report.md) §11.

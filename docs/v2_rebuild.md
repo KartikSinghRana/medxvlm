@@ -27,7 +27,11 @@ Exact commands: `scripts/run_v2_rebuild.sh` (serialized; one GPU job at a time).
 | **Stage 2 v2, image-only, ASL** | `classifier_v2.yaml` | **0.833** | 8 (early-stopped at 14) | 33.8 min |
 | Baseline v2: ImageNet ViT-B/16 + linear, BCE | `baseline_v2.yaml --backbone vit_base_patch16_224` | 0.781 | 7 | 25.9 min |
 | Baseline v2: XrayDINOv2 + linear, BCE | `baseline_v2.yaml --backbone xraydinov2` | 0.776 | 7 | 26.1 min |
-| **Stage 3 v2**, LoRA on Qwen2.5-1.5B, frontal-only, abnormal-oversampled (run 2026-09-19) | `report_gen_v2.yaml` | val loss **1.132** | 3 (early-stopped at 5) | 278.6 min |
+| **Stage 3 v2**, LoRA on Qwen2.5-1.5B, frontal-only, abnormal-oversampled 50% (run 2026-09-19) | `report_gen_v2.yaml` | val loss **1.132** | 3 (early-stopped at 5) | 278.6 min |
+| Stage 3 v2b, as v2 but 30% abnormal (2026-09-20) | `report_gen_v2b.yaml` | val loss 1.108 (but fully collapsed — §3.6.4) | 2 (early-stopped at 4) | 131.0 min |
+| Stage 2 v2 seeds 1, 2, 3 (2026-09-20) | `classifier_v2.yaml --seed N` | 0.828 / 0.850 / 0.810 | 8 / 9 / 8 | 29.7 / 34.6 / 39.2 min |
+| Stage 1 v3 sentence-level multi-positive (2026-09-20) | `align_v3_sentence.yaml` | val loss 2.94 | 10 | 26.1 min |
+| Stage 1 v3b finding-sentences only (2026-09-20) | `align_v3b_findings.yaml` | val loss 0.99 (different loss scale) | 5 (early-stopped at 8) | 17.1 min |
 
 Stage 2 v2 overfits quickly (train macro AUROC 0.98 by epoch 14 while val slid from 0.83 to 0.79) — early stopping did its job, but ~3k training images is the regime we are in.
 
@@ -80,7 +84,7 @@ n+ = true positives among the 377 test images. AUROC on single-digit support is 
 
 **Support caveat, stated plainly:** removing the false positives left this outpatient test set with genuinely few true cases of several conditions — one pneumothorax, five consolidations, three "pleural other." That is the real prevalence, not a data error, but it means those per-class numbers (and the Phase 5 comparison's Pneumothorax row) should not be read as measurements. The ≥10-positive macro (0.862) is the more trustworthy summary of the shared classes.
 
-### 3.3 Zero-shot head — a negative result
+### 3.3 Zero-shot head — a negative result (as of 2026-09-17; partially reversed by v3b, §3.6.3: 0.734)
 
 The CLIP-style zero-shot head (image embedding vs. a `"There is {label}."` prompt embedding from the Stage 1 encoders, cosine similarity as the score) is the structurally closest MedXVLM counterpart to RadZero's protocol. **It does not work at this data scale**, and three attempts to rescue it failed:
 
@@ -185,16 +189,37 @@ Beam search with a mild repetition penalty removes about two-thirds of the inven
 | **v3 (sentence-level, multi-positive, frontal)** | **0.568** | **0.558** |
 | RadZero (353k pairs) | 0.868 | — |
 
-The sentence-level recipe did not help, and the scoring change is not a reliable gain either. The training curve shows why the objective barely moved (val loss 3.19 → 2.94 over 12 epochs): counting with the labeler, **only 1,683 of the 16,375 training sentences (10.3%) contain a positive or uncertain finding**; 20% are negations and 70% are boilerplate ("heart size normal", "bony structures intact"). In a batch of 32 sentences, ~3 carry class-discriminative signal; the other 29 are near-synonymous normal statements that an exact-text positive mask cannot equate, so the contrastive task is mostly "which normal phrasing belongs to which normal image" — noise. RadZero sidesteps this with LLM-extracted *finding* sentences and ~100× the images (which would put its finding-sentence count in the tens of thousands versus 1,683 here). A final variant that trains on **finding sentences only** (`align_v3b_findings.yaml`: the 900 images with a finding sentence, all normals sharing one canonical sentence) is queued; its result is recorded below when available. Whatever it shows, the conclusion so far stands: prompt-based zero-shot classification is data-scale-limited here, and the project's defensible classification claim is the supervised head and its ensemble.
+The sentence-level recipe did not help, and the scoring change is not a reliable gain either. The training curve shows why the objective barely moved (val loss 3.19 → 2.94 over 12 epochs): counting with the labeler, **only 1,683 of the 16,375 training sentences (10.3%) contain a positive or uncertain finding**; 20% are negations and 70% are boilerplate ("heart size normal", "bony structures intact"). In a batch of 32 sentences, ~3 carry class-discriminative signal; the other 29 are near-synonymous normal statements that an exact-text positive mask cannot equate, so the contrastive task is mostly "which normal phrasing belongs to which normal image" — noise. RadZero sidesteps this with LLM-extracted *finding* sentences and ~100× the images (which would put its finding-sentence count in the tens of thousands versus 1,683 here). **v3b — finding sentences only — confirms the diagnosis and is the best zero-shot head in the project.** `align_v3b_findings.yaml`: same recipe, but only sentences with a positive/uncertain finding mention are used (900 images have one; the other 2,130 normal images all get the single canonical sentence *"No acute cardiopulmonary abnormality."*, making them mutual positives). 8 epochs, early-stopped, best epoch 5, 17.1 min.
 
-**3.6.4 Stage 3 v2b (30% abnormal sampling).** Failed twice at the first backward with `CUDA driver error: device not ready` — traced to `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (added for this chain; incompatible with near-cap allocations under WSL2). Relaunched without it at 20:46; result recorded below when available.
+| Stage 1 checkpoint | pos-only prompt | pos − neg, 3 templates | shared classes with ≥10 positives (pos-only) |
+|---|---:|---:|---:|
+| Phase 3 (report-level) | 0.669 | 0.642 | 0.708 |
+| v2 (report-level, frozen tower) | 0.565 | 0.604 | 0.547 |
+| v3 (all sentences) | 0.568 | 0.558 | — |
+| **v3b (finding sentences only)** | **0.734** | 0.605 | **0.693** |
+| RadZero | 0.868 | — | 0.875 |
 
-<!-- OVERNIGHT_PENDING: v3b zero-shot + v2b Stage 3 results to be appended -->
+Per class, v3b improves on v2 for every finding (Cardiomegaly 0.63 → 0.74, Atelectasis 0.41 → 0.66, Pneumonia 0.38 → 0.72, Pleural Effusion 0.64 → 0.75, Fracture 0.55 → 0.69); the one regression is "No Finding" (0.34 → 0.23), a negative concept that a single-prompt cosine handles badly. Two further points, both consistent with the mechanism: (a) removing the 90% of sentences that carry no finding is what made the loss learnable — v3's problem was signal density, not the objective; (b) the pos − neg scoring *hurts* v3b (0.605) because it never saw a negated sentence in training — scoring must match the training text distribution, which is also why it helped v2 (trained on full reports full of negations) and not v3b.
+
+**Where this leaves zero-shot:** 0.734 is a real, honestly-obtained prompt-based classifier — well above chance and above every earlier attempt — but 13 points behind RadZero, and below every supervised number in this project (linear baseline 0.777, ensemble 0.868). The remaining gap is what 1,683 finding sentences from 900 images can support versus the tens of thousands RadZero was trained on; further recipe changes are unlikely to close it. The project's classification claim remains the supervised head and its ensemble; the zero-shot head is reported as a characterised secondary result, not a headline.
+
+**3.6.4 Stage 3 v2b (30% abnormal sampling) — total collapse; the oversampling was load-bearing.** After two launch failures (`CUDA driver error: device not ready` at the first backward, traced to `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`, which is incompatible with near-cap allocations under WSL2; removed), v2b trained cleanly: 4 epochs, early-stopped, best epoch 2, **val loss 1.108 (lower than v2's 1.132)**, 131 min. Identical recipe to v2 except `abnormal_fraction: 0.3` (the natural rate, i.e. effectively no oversampling). Result on the same 150 images:
+
+| Stage 3 variant (frontal 70) | CE macro F1 | Distinct / 70 | Modal share | Device hallucination | Mean words |
+|---|---:|---:|---:|---:|---:|
+| Phase 3 (no oversampling, old tower) | 0.078 | 5 | 74% | 1% | 29.6 |
+| **v2b — 30% abnormal** | **0.057** | **1** | **100%** | 0% | 17.0 |
+| v2 — 50% abnormal, greedy | 0.152 | 26 | 54% | 10% | 35.4 |
+| v2 — 50% abnormal, beam 3 + rep. penalty 1.2 | **0.176** | 14 | 61% | **3%** | 33.1 |
+| CheXOne instruct (reference) | 0.149 | 36 | 26% | 0% | 28.8 |
+
+v2b emits one sentence — *"The heart is normal in size. The mediastinum is unremarkable. The lungs are clear. No acute disease."* — for **all 150 test images** (beam search adds one variant). Its 0% hallucination is trivial. Two conclusions: (i) the 50% abnormal oversampling in v2 was not a tuning nicety but the thing that broke the collapse — at the natural rate the decoder reverts to the modal normal report; (ii) **teacher-forced validation loss is the wrong model-selection signal for this task**: the fully collapsed v2b has *better* NLL than v2 because it fits the 70%-normal majority more tightly. Any future Stage 3 selection should use a generation-based criterion (distinct-output count or CE F1 on a validation subsample), not NLL. Net: the best Stage 3 configuration in this project is **v2 + beam-3 decoding** — CE macro F1 0.176 vs CheXOne-instruct 0.149 on the same images, 3% hallucination, 61% modal share still open.
 
 ## 4. What this does and doesn't change about the project's story
 
 - **The headline classification number is now real.** 0.855/0.862 macro AUROC, blind, on held-out data, against corrected labels, within ~1 point of a published state-of-the-art zero-shot system on the same images. This replaces the 0.865 text-fusion figure, which should no longer be quoted as classification accuracy.
 - **Most of the recovery is data hygiene, not architecture**: fixing the labeler, dropping lateral views, and using a CXR-pretrained encoder took a linear head from 0.57 to ~0.78–0.80; the pipeline design adds the last ~5–8 points. That is an honest and defensible attribution, and the ablation table above is what supports it.
+- **After the 2026-09-20 overnight run (§3.6):** the honest classification number is **0.837 ± 0.015 (single seed) / 0.868 (4-seed ensemble)** — the ensemble equals RadZero on identical images; the 0.855 quoted earlier was the best seed. The demo app now serves the ensemble. Stage 3's best configuration is v2 + beam-3 decoding (CE F1 0.176, 3% hallucination); v2b showed the 50% abnormal oversampling is essential, and that val NLL selects the collapsed model. Zero-shot rose to 0.734 with finding-sentence training but remains data-scale-limited.
 - **Stage 3 was retrained on 2026-09-19 (§3.4).** The boilerplate collapse documented in `cross_dataset_evaluation.md` §5 is broken (5 → 61 distinct outputs on 150 images) and CE macro F1 now matches CheXOne-instruct on the same images (0.152 vs 0.149, frontal). The cost is a 10% (frontal) device/surgery hallucination rate that the Phase 3 model and CheXOne do not have, and the modal normal report still covers 54% of frontal outputs. The next lever is not more epochs (val loss turned up at epoch 4) but a stronger visual signal or a hallucination-aware training objective — out of scope for this rebuild.
 - **Phase 3 numbers are historical, not wrong-as-recorded**: `training_summary.md` accurately reports what those runs produced *under their protocol*; that protocol (text fusion, noisy labels, all views) is what this rebuild replaced.
 
@@ -204,4 +229,4 @@ The sentence-level recipe did not help, and the scoring change is not a reliable
 - Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`, `report_gen_v2b.yaml`, `align_v3_sentence.yaml`, `align_v3b_findings.yaml`.
 - Data: `data/processed/manifest.csv` (corrected); `data/processed/manifest_v1_phase3_labels.csv` (the Phase 3 labels, kept for reproducibility).
 - Checkpoints/logs: `checkpoints/{align,classifier,baseline,report_gen}_v2/`, `runs/{align,classifier,baseline,report_gen}_v2/`, `runs/v2_rebuild.log`, `runs/train_report_gen_v2.log`.
-- Results: `docs/phase5_artifacts/v2/v2_classification_{summary.json,raw.csv}`, `docs/phase5_artifacts/v2/medxvlm_stage3_v2_generations.csv`, `docs/phase5_artifacts/v2/report_generation_scores_v2.json`, `docs/phase5_artifacts/v2/chestxray14_external_eval_{summary.json,raw.csv}`.
+- Results: `docs/phase5_artifacts/v2/v2_classification_{summary.json,raw.csv}`, `classifier_seed_ensemble.json`, `report_generation_scores_v2_overnight.json`, `medxvlm_stage3_v2{,b}{,_beam3}_generations.csv`, `docs/phase5_artifacts/v2/medxvlm_stage3_v2_generations.csv`, `docs/phase5_artifacts/v2/report_generation_scores_v2.json`, `docs/phase5_artifacts/v2/chestxray14_external_eval_{summary.json,raw.csv}`.

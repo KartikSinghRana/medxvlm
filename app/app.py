@@ -88,11 +88,16 @@ card = load_model_card()
 
 with st.sidebar:
     st.header("Model")
+    n_models = pipeline.classifier_meta.get("n_models", 1)
     st.caption(
+        f"Device: `{pipeline.device}` · classifier: **{n_models}-seed ensemble** of `classifier_v2` "
+        f"({pipeline.classifier_meta['backbone']}, image-only) — 0.868 macro AUROC vs 0.837 ± 0.015 for a single seed."
+        if n_models > 1 else
         f"Device: `{pipeline.device}` · classifier `{pipeline.classifier_checkpoint.relative_to(REPO_ROOT)}` "
-        f"(epoch {pipeline.classifier_meta['epoch']}, {pipeline.classifier_meta['backbone']}, "
-        f"{'text fusion ON' if pipeline.classifier_meta['use_text_fusion'] else 'image-only'})"
+        f"({pipeline.classifier_meta['backbone']}, image-only)"
     )
+    if pipeline.classifier_meta.get("skipped"):
+        st.caption(f"Ensemble members not found: {pipeline.classifier_meta['skipped']}")
     enable_report = st.toggle(
         "Enable report generation",
         value=False,
@@ -114,14 +119,15 @@ with st.sidebar:
             st.markdown(
                 f"""
 **Classification (image-only, held-out Indiana test split, 377 frontal images)**
-- Macro AUROC, 8 classes shared with RadZero: **{card.get('home_auroc_8', float('nan')):.3f}** (RadZero on the same images: {card.get('radzero_auroc_8', float('nan')):.3f})
+- Macro AUROC, 8 classes shared with RadZero: single seed **{card.get('home_auroc_8', float('nan')):.3f}** (0.837 ± 0.015 over 4 seeds); **4-seed ensemble 0.868** — RadZero on the same images: {card.get('radzero_auroc_8', float('nan')):.3f}
 - Macro AUROC, all 13 measurable classes: **{card.get('home_auroc_13', float('nan')):.3f}**
 - On an unseen hospital (NIH ChestX-ray14 official test split, 25,596 images): **{card.get('nih_auroc_8', float('nan')):.3f}**
 
 **Report generation (70 frontal test images)**
 - Clinical-efficacy macro F1: **{card.get('ce_f1_v2', float('nan')):.3f}** (CheXOne-instruct on the same images: {card.get('ce_f1_chexone', float('nan')):.3f})
 - Distinct outputs over 150 test images: {card.get('distinct_v2', '?')} (the previous model produced 5)
-- Known failure: mentions a device or surgery that is not there in ~10% of frontal cases
+- Known failure: mentions a device or surgery that is not there in ~10% of frontal cases with greedy decoding, ~3% with beam search (the app default)
+- Zero-shot (prompt-based) classification: best variant 0.734 macro AUROC vs RadZero 0.868 — data-scale-limited, not used by this app
 
 Sources: `docs/v2_rebuild.md`, `docs/status_report.md`.
 """
@@ -233,9 +239,15 @@ if not enable_report:
     st.info("Turn on **Enable report generation** in the sidebar to load the decoder (~7 GB VRAM).")
 else:
     max_new = st.slider("Max new tokens", 32, 256, 128, 32)
+    decoding_choice = st.radio(
+        "Decoding", ["Beam search (3 beams, repetition penalty 1.2) — recommended", "Greedy"], horizontal=True,
+        help="On held-out data beam search raised clinical-efficacy F1 0.152 → 0.176 and cut invented devices 10% → 3%, "
+             "at the cost of less varied output.",
+    )
+    decoding = {"num_beams": 3, "repetition_penalty": 1.2} if decoding_choice.startswith("Beam") else {"num_beams": 1}
     if st.button("Generate findings", type="primary"):
-        with st.spinner("Generating (≈5–10 s on GPU; minutes on CPU)…"):
-            report = pipeline.generate_report(image, max_new_tokens=max_new)
+        with st.spinner("Generating (≈5–15 s on GPU; minutes on CPU)…"):
+            report = pipeline.generate_report(image, max_new_tokens=max_new, decoding=decoding)
         st.session_state["last_report"] = report
     report = st.session_state.get("last_report")
     if report is not None:
@@ -250,8 +262,8 @@ else:
                 st.markdown("**Reference (radiologist)**")
                 st.write(row.report_text)
         st.caption(
-            f"Greedy decoding, max {report.max_new_tokens} new tokens, checkpoint `{report.checkpoint}`. "
-            "Measured on held-out data this generator matches CheXOne-instruct on clinical-efficacy F1 (≈0.15) — "
-            "which is low in absolute terms: most specific abnormal findings are still missed, and ~10% of outputs "
-            "mention a device that is not present."
+            f"Decoding {report.decoding}, max {report.max_new_tokens} new tokens, checkpoint `{report.checkpoint}`. "
+            "Measured on held-out data: clinical-efficacy F1 0.176 with beam search (CheXOne-instruct: 0.149), "
+            "0.152 greedy — low in absolute terms: most specific abnormal findings are still missed; invented devices "
+            "appear in ~3% (beam) / ~10% (greedy) of outputs."
         )
