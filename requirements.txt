@@ -42,3 +42,4 @@ pyyaml==6.0.3
 kagglehub==1.0.2
 tensorboard==2.21.0
 streamlit==1.61.1
+altair==6.2.2          # imported directly by app/app.py (probability chart)

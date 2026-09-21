@@ -137,14 +137,18 @@ overlays → optionally a generated findings paragraph, with the reference
 report and true labels alongside when the image comes from the test split.
 
 ```bash
+conda activate ml   # streamlit is not installed in the base env
 PYTHONPATH=src streamlit run app/app.py
 ```
 
+- **Trained weights are not in this repository** (`checkpoints/` is gitignored, ~12 GB). A fresh clone has the code and every
+  reported number, but the app and eval scripts need the checkpoints: either retrain with the commands in *Training*
+  (recipes in `configs/*_v2.yaml`, `align_v3b_findings.yaml`) or copy `checkpoints/` from the original machine.
 - The 4-seed ensemble classifier loads on start (~1.4 GB VRAM); reports use beam-3 decoding by default. Report generation is **off by
   default** (toggle in the sidebar; loads the 1.5B decoder, ~7 GB VRAM).
 - Every screen states the measured numbers and the known failure modes
   (thin-support classes are greyed out; device mentions in generated text are
-  flagged, since the generator hallucinates them in ~10% of cases).
+  flagged, since the generator hallucinates them in ~3% of frontal cases with beam decoding, ~10% greedy).
 - All inference logic is in `src/medxvlm/inference.py` (`MedXVLMPipeline`);
   the app is a thin view over it.
 - Headless functional check (no browser needed):

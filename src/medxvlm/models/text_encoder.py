@@ -65,7 +65,9 @@ class TextEncoder(nn.Module):
                     "Could not load PubMedBERT weights (%s); falling back to bert-base-uncased.",
                     exc,
                 )
-                # TODO: swap in PubMedBERT weights if the checkpoint isn't reachable in this environment.
+                # Fallback path below (bert-base-uncased). Not exercised in any recorded run: every
+                # checkpoint in checkpoints/ was trained with the BiomedBERT weights
+                # (`used_pubmedbert_weights` is True), so a fallback model would not match them.
 
         tokenizer = AutoTokenizer.from_pretrained(FALLBACK_MODEL_ID)
         if pretrained:

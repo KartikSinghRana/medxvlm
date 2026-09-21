@@ -1,9 +1,17 @@
 """Stage 2: per-label attention pooling classifier over vision patch tokens.
 
-No text fusion yet — this module only consumes `VisionEncoder` patch
-tokens. Gated text fusion (mixing in `TextEncoder`/`ContrastiveAlignment`
-embeddings before classification) is the next milestone; see the # TODO
-below and `docs/code_review_notes.md`.
+Image-only by default: one learned query per CheXpert label attends over the
+`VisionEncoder` patch tokens and a shared linear layer scores each pooled
+vector. The attention weights are returned so they can be visualised
+(`explain/attention_maps.py`) and scored against bounding boxes.
+
+Optional gated text fusion (`text_dim` + `forward(text_embeds=...)`) still
+exists for the Phase 3 configuration, but it is **disabled in every v2
+recipe** (`use_text_fusion: false`): Phase 3 fed the ground-truth report
+through it at train and test time, which inflated macro AUROC to 0.865 while
+the image-only path scored 0.51 (docs/v2_rebuild.md §1). Keep it off unless
+the text input is something available at inference time (e.g. the
+indication), never the report being predicted.
 """
 
 from __future__ import annotations

@@ -3,6 +3,11 @@
 #   1. wait for the kagglehub NIH ChestX-ray14 download+extract to finish
 #   2. run the external ChestX-ray14 eval (GPU, ~15 min)
 #   3. relaunch Stage 3 v2b training alone (GPU, ~4.5 h)
+echo "HISTORICAL (2026-09-20): this chain auto-launched a 4.5 h training run after an eval step."
+echo "That is no longer allowed here -- training needs an explicit go-ahead (docs/project_status_report.md §3)."
+echo "Kept for the record only. Use scripts/run_nih_eval_only.sh for the eval step."
+exit 1
+
 set -u
 cd "$(dirname "$0")/.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
