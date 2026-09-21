@@ -22,7 +22,7 @@ from PIL import Image
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from medxvlm.inference import MedXVLMPipeline  # noqa: E402
+from medxvlm.inference import REPORT_CHECKPOINTS, MedXVLMPipeline  # noqa: E402
 from medxvlm.models.labels import CHEXPERT_LABELS  # noqa: E402
 
 MANIFEST = REPO_ROOT / "data" / "processed" / "manifest.csv"
@@ -82,6 +82,12 @@ def load_model_card() -> dict:
             "random": pm["baseline_random_expected"]["overall"]["hit_rate"],
             "center": pm["baseline_center"]["overall"]["hit_rate"],
         }
+    v2c = ARTIFACTS / "report_generation_scores_v2c.json"
+    if v2c.exists():
+        s = json.load(open(v2c))["systems"]
+        card["ce_f1_v2c"] = s["v2c_stage3"]["frontal_70"]["clinical_efficacy"]["macro_f1"]
+        card["ce_f1_v2_beam"] = s["v2_stage3_beam3"]["frontal_70"]["clinical_efficacy"]["macro_f1"]
+        card["ce_f1_ceiling"] = s["classifier_verbalised"]["frontal_70"]["clinical_efficacy"]["macro_f1"]
     attribution = ARTIFACTS / "sentence_attribution_summary.json"
     if attribution.exists():
         card["attribution"] = json.load(open(attribution)).get("indiana_frontal_test", {})
@@ -123,14 +129,27 @@ with st.sidebar:
         value=False,
         help="Loads the Qwen2.5-1.5B LoRA decoder (~7 GB VRAM). Off by default to keep the GPU free.",
     )
-    if enable_report and pipeline.report_generator is None:
-        with st.spinner("Loading the report generator (≈10 s)…"):
-            pipeline.load_report_generator()
+    REPORT_MODEL_LABELS = {
+        "v2": f"v2 — writes from the image (CE F1 {card.get('ce_f1_v2_beam', 0.176):.3f} beam, ~3% invented devices)",
+        "v2c": f"v2c — findings-conditioned (CE F1 {card.get('ce_f1_v2c', 0.165):.3f} greedy, 0% invented devices)",
+    }
+    report_model = st.radio("Report model", list(REPORT_MODEL_LABELS), format_func=REPORT_MODEL_LABELS.get, disabled=not enable_report,
+                            help="v2c puts the classifier ensemble's flagged findings into the prompt, so the report is a verbalisation of the "
+                                 "classifier: no invented devices, but it cannot know more than the classifier does (docs/v2_rebuild.md §3.7).")
+    wanted = REPORT_CHECKPOINTS[report_model]
+    if enable_report and (pipeline.report_generator is None or pipeline.report_checkpoint != wanted):
+        if not wanted.exists():
+            st.warning(f"Checkpoint missing: {wanted.relative_to(REPO_ROOT)}")
+        else:
+            with st.spinner(f"Loading report generator {report_model} (≈10 s)…"):
+                pipeline.load_report_generator(wanted)
+            st.session_state.pop("last_report", None)
     if not enable_report and pipeline.report_generator is not None:
         pipeline.unload_report_generator()
     if pipeline.report_generator is not None:
         m = pipeline.report_meta
-        st.caption(f"Generator: `{m['decoder']}` + LoRA, epoch {m['epoch']}, {m['visual_tokens']} visual tokens, on `{m['vision_checkpoint']}`.")
+        st.caption(f"Generator: `{m['decoder']}` + LoRA, epoch {m['epoch']}, {m['visual_tokens']} visual tokens, on `{m['vision_checkpoint']}`"
+                   + (", findings-conditioned prompt." if m.get("findings_conditioning") else "."))
     if pipeline.device.type == "cuda":
         st.caption(f"GPU memory in use: {torch.cuda.memory_allocated() / 1e9:.1f} GB")
 
@@ -147,6 +166,7 @@ with st.sidebar:
 - Clinical-efficacy macro F1: **{card.get('ce_f1_v2', float('nan')):.3f}** (CheXOne-instruct on the same images: {card.get('ce_f1_chexone', float('nan')):.3f})
 - Distinct outputs over 150 test images: {card.get('distinct_v2', '?')} (the previous model produced 5)
 - Known failure: mentions a device or surgery that is not there in ~10% of frontal cases with greedy decoding, ~3% with beam search (the app default)
+- **v2c, findings-conditioned** (classifier findings written into the prompt): CE F1 {card.get('ce_f1_v2c', float('nan')):.3f} greedy, **0% hallucination**; a perfect verbaliser of the classifier would score {card.get('ce_f1_ceiling', float('nan')):.3f} on these 70 images, so the two report models are within noise of each other (±0.10) — v2c's gain is honesty, not recall
 - Zero-shot (prompt-based) classification: best variant 0.734 macro AUROC vs RadZero 0.868 — data-scale-limited, not used by this app
 
 **Explainability (pointing game on {card.get('grounding', {}).get('n_boxes', '—')} radiologist boxes, NIH ChestX-ray14)**
@@ -280,10 +300,12 @@ if not enable_report:
     st.info("Turn on **Enable report generation** in the sidebar to load the decoder (~7 GB VRAM).")
 else:
     max_new = st.slider("Max new tokens", 32, 256, 128, 32)
+    is_v2c = bool(pipeline.report_meta.get("findings_conditioning"))
+    decoding_options = ["Beam search (3 beams, repetition penalty 1.2)", "Greedy"]
     decoding_choice = st.radio(
-        "Decoding", ["Beam search (3 beams, repetition penalty 1.2) — recommended", "Greedy"], horizontal=True,
-        help="On held-out data beam search raised clinical-efficacy F1 0.152 → 0.176 and cut invented devices 10% → 3%, "
-             "at the cost of less varied output.",
+        "Decoding", decoding_options, index=1 if is_v2c else 0, horizontal=True,
+        help="v2: beam search raised clinical-efficacy F1 0.152 → 0.176 and cut invented devices 10% → 3%. "
+             "v2c: greedy scores higher (0.165 vs 0.135) — beam smooths away the short finding sentences the prompt induces.",
     )
     decoding = {"num_beams": 3, "repetition_penalty": 1.2} if decoding_choice.startswith("Beam") else {"num_beams": 1}
     if st.button("Generate findings", type="primary"):
@@ -296,6 +318,10 @@ else:
         with gen_col:
             st.markdown("**Model**")
             st.write(report.text)
+            if pipeline.report_meta.get("findings_conditioning"):
+                st.caption("Findings the classifier put into the prompt: **"
+                           + (", ".join(report.flagged_findings) if report.flagged_findings else "none flagged")
+                           + "** — the report is a verbalisation of these; it cannot contain findings the classifier missed.")
             for flag in report.flags:
                 st.warning(flag, icon="⚠️")
         if ref_col is not None:
@@ -314,7 +340,7 @@ else:
                 "attention over the 64 visual tokens (8×8 grid); *vis* is the share of that sentence's attention that went to the "
                 "image at all (attention-sink corrected). Low shares mean the sentence came from the language prior, not the image."
             )
-            explanations = pipeline.attribute_report(image, report.text)
+            explanations = pipeline.attribute_report(image, report.text, instruction=report.instruction)
             if explanations:
                 cols = st.columns(min(len(explanations), 4))
                 for i, e in enumerate(explanations):

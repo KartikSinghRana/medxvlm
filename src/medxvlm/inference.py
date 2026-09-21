@@ -22,7 +22,10 @@ import numpy as np
 import torch
 from PIL import Image
 
+import json
+
 from medxvlm.data.dataset import DEFAULT_REPORT_INSTRUCTION, build_transforms
+from medxvlm.data.findings_prompt import LISTABLE_LABELS, findings_instruction
 from medxvlm.engine.loop_utils import load_checkpoint, load_stage1_alignment, load_vision_encoder
 from medxvlm.explain import saliency
 from medxvlm.explain.attention_maps import overlay_attention
@@ -39,7 +42,15 @@ DEFAULT_CLASSIFIER_CHECKPOINT = REPO_ROOT / "checkpoints" / "classifier_v2" / "l
 DEFAULT_CLASSIFIER_ENSEMBLE = tuple(
     REPO_ROOT / "checkpoints" / "classifier_v2" / run / "best.pt" for run in ("local_on", "seed1", "seed2", "seed3")
 )
-DEFAULT_REPORT_CHECKPOINT = REPO_ROOT / "checkpoints" / "report_gen_v2" / "best.pt"
+# Report generators the app can serve. "v2" writes from the image alone; "v2c" is findings-conditioned:
+# its prompt carries the classifier ensemble's flagged findings (docs/v2_rebuild.md §3.7), built here from the
+# *live* ensemble probabilities and the val-selected thresholds -- the same rule that built its training prompts.
+REPORT_CHECKPOINTS = {
+    "v2": REPO_ROOT / "checkpoints" / "report_gen_v2" / "best.pt",
+    "v2c": REPO_ROOT / "checkpoints" / "report_gen_v2c" / "best.pt",
+}
+DEFAULT_REPORT_CHECKPOINT = REPORT_CHECKPOINTS["v2"]
+FINDINGS_THRESHOLDS_PATH = REPO_ROOT / "docs" / "phase5_artifacts" / "v2" / "stage2_ensemble_thresholds.json"
 # Beam search + mild repetition penalty: CE F1 0.152 -> 0.176 and device hallucination
 # 10% -> 3% on the same checkpoint (docs/v2_rebuild.md §3.6.2). Greedy was the wrong default.
 DEFAULT_DECODING = {"num_beams": 3, "repetition_penalty": 1.2}
@@ -75,6 +86,8 @@ class ReportResult:
     max_new_tokens: int
     decoding: dict = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)  # honesty flags for the UI, e.g. device-mention warning
+    instruction: str = DEFAULT_REPORT_INSTRUCTION  # the exact prompt used (carries the flagged findings for v2c)
+    flagged_findings: list[str] = field(default_factory=list)  # classifier findings put into the prompt (v2c only)
 
 
 @dataclass
@@ -153,8 +166,13 @@ class MedXVLMPipeline:
         }
         return vision, head, meta
 
-    def load_report_generator(self) -> None:
-        """Load Stage 3 lazily -- the 1.5B decoder is the expensive part (~7 GB VRAM in fp32)."""
+    def load_report_generator(self, checkpoint: str | Path | None = None) -> None:
+        """Load Stage 3 lazily -- the 1.5B decoder is the expensive part (~7 GB VRAM in fp32).
+
+        Passing a different `checkpoint` swaps the generator (one decoder is kept in memory at a time)."""
+        if checkpoint is not None and Path(checkpoint) != self.report_checkpoint:
+            self.unload_report_generator()
+            self.report_checkpoint = Path(checkpoint)
         if self.report_generator is not None or self.report_checkpoint is None:
             return
         ckpt = load_checkpoint(self.report_checkpoint)
@@ -180,7 +198,11 @@ class MedXVLMPipeline:
             "decoder": config["decoder_name"],
             "visual_tokens": model.num_visual_tokens,
             "vision_checkpoint": str(vision_path.relative_to(REPO_ROOT)),
+            "findings_conditioning": bool(config.get("findings_conditioning", False)),
+            "select_by": ckpt.get("select_by", "val_loss"),
         }
+        if self.report_meta["findings_conditioning"] and not hasattr(self, "_findings_thresholds"):
+            self._findings_thresholds = json.load(open(FINDINGS_THRESHOLDS_PATH))["thresholds"]
 
     def unload_report_generator(self) -> None:
         self.report_generator = None
@@ -247,15 +269,30 @@ class MedXVLMPipeline:
             maps = grounder.map(batch, grounder.embed_prompts([f"There is {l.lower()}." for l in labels]))[0]
         return {label: overlay_attention(pixel_values, maps[i].cpu()) for i, label in enumerate(labels)}
 
+    def flagged_findings(self, probabilities: dict[str, float]) -> list[str]:
+        """Classifier findings above their val-selected thresholds, most confident first (the v2c prompt rule)."""
+        thr = self._findings_thresholds
+        names = [l for l in LISTABLE_LABELS if probabilities[l] >= thr[l]]
+        return sorted(names, key=lambda l: -probabilities[l])
+
+    def report_instruction(self, image: Image.Image) -> tuple[str, list[str]]:
+        """The prompt the loaded generator expects: plain for v2, findings-conditioned (from live ensemble probs) for v2c."""
+        if self.report_meta.get("findings_conditioning"):
+            flagged = self.flagged_findings(self.classify(image).probabilities)
+            return findings_instruction(flagged), flagged
+        return DEFAULT_REPORT_INSTRUCTION, []
+
     @torch.no_grad()
-    def attribute_report(self, image: Image.Image, text: str) -> list[SentenceExplanation]:
+    def attribute_report(self, image: Image.Image, text: str, instruction: str | None = None) -> list[SentenceExplanation]:
         """Per-sentence visual attention of the generator for an already generated `text` (one extra decoder pass)."""
         if self.report_generator is None:
             self.load_report_generator()
         pixel_values = self.preprocess(image)
+        if instruction is None:
+            instruction = self.report_instruction(image)[0]
         self._set_decoder_attention("eager")
         atts: list[SentenceAttribution] = attribute_sentences(
-            self.report_generator, pixel_values.unsqueeze(0).to(self.device), DEFAULT_REPORT_INSTRUCTION, text
+            self.report_generator, pixel_values.unsqueeze(0).to(self.device), instruction, text
         )
         return [SentenceExplanation(a.sentence, a.visual_share_excl_sink, overlay_attention(pixel_values, a.visual_map)) for a in atts]
 
@@ -266,12 +303,15 @@ class MedXVLMPipeline:
         assert self.report_generator is not None, "no report checkpoint configured"
         self._set_decoder_attention("sdpa")
         decoding = DEFAULT_DECODING if decoding is None else decoding
+        instruction, flagged = self.report_instruction(image)
         pixel_values = self.preprocess(image).unsqueeze(0).to(self.device)
-        text = self.report_generator.generate(pixel_values, DEFAULT_REPORT_INSTRUCTION, max_new_tokens=max_new_tokens, **decoding)[0].strip()
+        text = self.report_generator.generate(pixel_values, instruction, max_new_tokens=max_new_tokens, **decoding)[0].strip()
         return ReportResult(
             text=text,
             checkpoint=str(self.report_checkpoint.relative_to(REPO_ROOT)),
             max_new_tokens=max_new_tokens,
             decoding=dict(decoding),
             flags=_flag_report(text),
+            instruction=instruction,
+            flagged_findings=flagged,
         )

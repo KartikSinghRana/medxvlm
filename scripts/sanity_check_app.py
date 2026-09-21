@@ -99,6 +99,17 @@ def check_report_generation(at: AppTest) -> None:
     captions = [c.value for c in expanders[0].caption] if hasattr(expanders[0], "caption") else []
     assert any("attention weights exposed" in c for c in captions), "sentence-attribution explanation missing"
     print("[PASS] report generation: decoder loaded, findings generated, sentence attribution rendered")
+    # switch to the findings-conditioned v2c generator and generate again
+    model_radio = [r for r in at.radio if r.label == "Report model"]
+    assert model_radio, "report-model radio missing"
+    model_radio[0].set_value("v2c").run(timeout=300)
+    _fail_on_exception(at, "switch to v2c")
+    buttons = [b for b in at.button if "Generate" in b.label]
+    buttons[0].click().run(timeout=300)
+    _fail_on_exception(at, "generate with v2c")
+    captions = " ".join(c.value for c in at.caption)
+    assert "put into the prompt" in captions, "v2c flagged-findings caption missing"
+    print("[PASS] v2c: findings-conditioned generator loaded, report + prompt findings rendered")
 
 
 def main() -> int:

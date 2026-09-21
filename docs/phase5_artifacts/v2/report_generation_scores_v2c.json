@@ -1753,6 +1753,444 @@
         }
       }
     },
+    "v2c_epoch3_stage3": {
+      "source": "docs/phase5_artifacts/v2/medxvlm_stage3_v2c_epoch3_generations.csv",
+      "all_150": {
+        "subset": "all (80 lateral + 70 frontal)",
+        "n": 150,
+        "clinical_efficacy": {
+          "macro_precision": 0.2149145184389545,
+          "macro_recall": 0.1781547619047619,
+          "macro_f1": 0.1910040042693104,
+          "micro_f1": 0.5444126074498568,
+          "per_class": {
+            "No Finding": {
+              "precision": 0.7708,
+              "recall": 0.74,
+              "f1": 0.7551,
+              "support_positive": 100
+            },
+            "Enlarged Cardiomediastinum": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Cardiomegaly": {
+              "precision": 0.7143,
+              "recall": 0.3333,
+              "f1": 0.4545,
+              "support_positive": 15
+            },
+            "Lung Opacity": {
+              "precision": 0.4737,
+              "recall": 0.5,
+              "f1": 0.4865,
+              "support_positive": 18
+            },
+            "Lung Lesion": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 5
+            },
+            "Edema": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 5
+            },
+            "Consolidation": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pneumonia": {
+              "precision": 0.4,
+              "recall": 0.4,
+              "f1": 0.4,
+              "support_positive": 5
+            },
+            "Atelectasis": {
+              "precision": 0.25,
+              "recall": 0.1875,
+              "f1": 0.2143,
+              "support_positive": 16
+            },
+            "Pneumothorax": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pleural Effusion": {
+              "precision": 0.4,
+              "recall": 0.3333,
+              "f1": 0.3636,
+              "support_positive": 6
+            },
+            "Pleural Other": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 2
+            },
+            "Fracture": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 5
+            },
+            "Support Devices": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 2
+            }
+          }
+        },
+        "text": {
+          "bleu4": 9.002507716038059,
+          "bleu_note": "sacrebleu corpus_bleu, default 13a tokenizer, 0-100 scale",
+          "rougeL_f": 0.2513814216429472
+        },
+        "collapse": {
+          "n": 150,
+          "n_distinct": 27,
+          "top1_share": 0.62,
+          "top1_text": "The heart is normal in size. The mediastinum is unremarkable. The lungs are clear. No acute disease.",
+          "mean_words": 33.58
+        }
+      },
+      "frontal_70": {
+        "subset": "frontal only",
+        "n": 70,
+        "clinical_efficacy": {
+          "macro_precision": 0.2703148154630634,
+          "macro_recall": 0.22721334910775903,
+          "macro_f1": 0.2305916305916306,
+          "micro_f1": 0.6506024096385542,
+          "per_class": {
+            "No Finding": {
+              "precision": 0.7736,
+              "recall": 0.8913,
+              "f1": 0.8283,
+              "support_positive": 46
+            },
+            "Enlarged Cardiomediastinum": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Cardiomegaly": {
+              "precision": 0.6667,
+              "recall": 0.6667,
+              "f1": 0.6667,
+              "support_positive": 6
+            },
+            "Lung Opacity": {
+              "precision": 0.5714,
+              "recall": 0.4444,
+              "f1": 0.5,
+              "support_positive": 9
+            },
+            "Lung Lesion": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 4
+            },
+            "Edema": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 3
+            },
+            "Consolidation": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pneumonia": {
+              "precision": 0.5,
+              "recall": 0.5,
+              "f1": 0.5,
+              "support_positive": 2
+            },
+            "Atelectasis": {
+              "precision": 0.2727,
+              "recall": 0.4286,
+              "f1": 0.3333,
+              "support_positive": 7
+            },
+            "Pneumothorax": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pleural Effusion": {
+              "precision": 1.0,
+              "recall": 0.25,
+              "f1": 0.4,
+              "support_positive": 4
+            },
+            "Pleural Other": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 1
+            },
+            "Fracture": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 3
+            },
+            "Support Devices": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 1
+            }
+          }
+        },
+        "text": {
+          "bleu4": 8.66876255208675,
+          "bleu_note": "sacrebleu corpus_bleu, default 13a tokenizer, 0-100 scale",
+          "rougeL_f": 0.28753240304835853
+        },
+        "collapse": {
+          "n": 70,
+          "n_distinct": 13,
+          "top1_share": 0.7428571428571429,
+          "top1_text": "The heart is normal in size. The mediastinum is unremarkable. The lungs are clear. No acute disease.",
+          "mean_words": 22.0
+        }
+      }
+    },
+    "v2c_epoch3_stage3_beam3": {
+      "source": "docs/phase5_artifacts/v2/medxvlm_stage3_v2c_epoch3_beam3_generations.csv",
+      "all_150": {
+        "subset": "all (80 lateral + 70 frontal)",
+        "n": 150,
+        "clinical_efficacy": {
+          "macro_precision": 0.1770694259012016,
+          "macro_recall": 0.10373015873015874,
+          "macro_f1": 0.12060430579554475,
+          "micro_f1": 0.5377643504531722,
+          "per_class": {
+            "No Finding": {
+              "precision": 0.729,
+              "recall": 0.78,
+              "f1": 0.7536,
+              "support_positive": 100
+            },
+            "Enlarged Cardiomediastinum": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Cardiomegaly": {
+              "precision": 0.75,
+              "recall": 0.2,
+              "f1": 0.3158,
+              "support_positive": 15
+            },
+            "Lung Opacity": {
+              "precision": 0.6667,
+              "recall": 0.2222,
+              "f1": 0.3333,
+              "support_positive": 18
+            },
+            "Lung Lesion": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 5
+            },
+            "Edema": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 5
+            },
+            "Consolidation": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pneumonia": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 5
+            },
+            "Atelectasis": {
+              "precision": 0.3333,
+              "recall": 0.25,
+              "f1": 0.2857,
+              "support_positive": 16
+            },
+            "Pneumothorax": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pleural Effusion": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 6
+            },
+            "Pleural Other": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 2
+            },
+            "Fracture": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 5
+            },
+            "Support Devices": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 2
+            }
+          }
+        },
+        "text": {
+          "bleu4": 10.78394689392319,
+          "bleu_note": "sacrebleu corpus_bleu, default 13a tokenizer, 0-100 scale",
+          "rougeL_f": 0.28957044677882154
+        },
+        "collapse": {
+          "n": 150,
+          "n_distinct": 20,
+          "top1_share": 0.62,
+          "top1_text": "The heart is normal in size and contour. The lungs are clear, without evidence of infiltrate. There is no pneumothorax or effusion. No acute cardiopulmonary disease.",
+          "mean_words": 37.17333333333333
+        }
+      },
+      "frontal_70": {
+        "subset": "frontal only",
+        "n": 70,
+        "clinical_efficacy": {
+          "macro_precision": 0.1603896103896104,
+          "macro_recall": 0.13566006112589962,
+          "macro_f1": 0.14187429731984189,
+          "micro_f1": 0.6114649681528662,
+          "per_class": {
+            "No Finding": {
+              "precision": 0.7455,
+              "recall": 0.8913,
+              "f1": 0.8119,
+              "support_positive": 46
+            },
+            "Enlarged Cardiomediastinum": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Cardiomegaly": {
+              "precision": 0.75,
+              "recall": 0.5,
+              "f1": 0.6,
+              "support_positive": 6
+            },
+            "Lung Opacity": {
+              "precision": 0.5,
+              "recall": 0.2222,
+              "f1": 0.3077,
+              "support_positive": 9
+            },
+            "Lung Lesion": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 4
+            },
+            "Edema": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 3
+            },
+            "Consolidation": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pneumonia": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 2
+            },
+            "Atelectasis": {
+              "precision": 0.25,
+              "recall": 0.2857,
+              "f1": 0.2667,
+              "support_positive": 7
+            },
+            "Pneumothorax": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 0
+            },
+            "Pleural Effusion": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 4
+            },
+            "Pleural Other": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 1
+            },
+            "Fracture": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 3
+            },
+            "Support Devices": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support_positive": 1
+            }
+          }
+        },
+        "text": {
+          "bleu4": 10.849157249664803,
+          "bleu_note": "sacrebleu corpus_bleu, default 13a tokenizer, 0-100 scale",
+          "rougeL_f": 0.318918415437007
+        },
+        "collapse": {
+          "n": 70,
+          "n_distinct": 11,
+          "top1_share": 0.7428571428571429,
+          "top1_text": "The heart is normal in size and contour. The lungs are clear, without evidence of infiltrate. There is no pneumothorax or effusion. No acute cardiopulmonary disease.",
+          "mean_words": 28.814285714285713
+        }
+      }
+    },
     "classifier_verbalised": {
       "source": "docs/phase5_artifacts/v2/classifier_verbalised_generations.csv",
       "all_150": {

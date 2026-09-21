@@ -49,6 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage1-checkpoint", type=Path, default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--grad-accum-steps", type=int, default=None, help="Override grad_accum_steps (e.g. --batch-size 2 --grad-accum-steps 8 keeps the effective batch at 16 with less VRAM).")
     parser.add_argument("--limit-train-batches", type=int, default=None, help="Smoke-test only: stop each train epoch after N batches.")
     parser.add_argument("--resume", type=Path, default=None,
                         help="Continue from a saved trainable checkpoint (last.pt/best.pt): loads projector+LoRA, starts at its epoch+1, "
@@ -173,7 +174,7 @@ def run_generation_eval(model: ReportGenerator, subset: Subset, device, batch_si
 
 def main() -> int:
     args = parse_args()
-    config = load_config(args.config, {"epochs": args.epochs, "batch_size": args.batch_size})
+    config = load_config(args.config, {"epochs": args.epochs, "batch_size": args.batch_size, "grad_accum_steps": args.grad_accum_steps})
     set_seed(config["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

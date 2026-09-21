@@ -32,6 +32,7 @@ Exact commands: `scripts/run_v2_rebuild.sh` (serialized; one GPU job at a time).
 | Stage 2 v2 seeds 1, 2, 3 (2026-09-20) | `classifier_v2.yaml --seed N` | 0.828 / 0.850 / 0.810 | 8 / 9 / 8 | 29.7 / 34.6 / 39.2 min |
 | Stage 1 v3 sentence-level multi-positive (2026-09-20) | `align_v3_sentence.yaml` | val loss 2.94 | 10 | 26.1 min |
 | Stage 1 v3b finding-sentences only (2026-09-20) | `align_v3b_findings.yaml` | val loss 0.99 (different loss scale) | 5 (early-stopped at 8) | 17.1 min |
+| **Stage 3 v2c**, as v2 + findings-conditioned prompt, selection by generation CE F1 (2026-09-21) | `report_gen_v2c.yaml` | val gen CE F1 **0.322** (val loss 1.152); full-val re-check 0.270 | 1 (early-stopped at 3) | 70.4 min (ep 1, batch 4) + 21.3 min (ep 2–3, batch 2×8) — §3.7 |
 
 Stage 2 v2 overfits quickly (train macro AUROC 0.98 by epoch 14 while val slid from 0.83 to 0.79) — early stopping did its job, but ~3k training images is the regime we are in.
 
@@ -215,10 +216,57 @@ Per class, v3b improves on v2 for every finding (Cardiomegaly 0.63 → 0.74, Ate
 
 v2b emits one sentence — *"The heart is normal in size. The mediastinum is unremarkable. The lungs are clear. No acute disease."* — for **all 150 test images** (beam search adds one variant). Its 0% hallucination is trivial. Two conclusions: (i) the 50% abnormal oversampling in v2 was not a tuning nicety but the thing that broke the collapse — at the natural rate the decoder reverts to the modal normal report; (ii) **teacher-forced validation loss is the wrong model-selection signal for this task**: the fully collapsed v2b has *better* NLL than v2 because it fits the 70%-normal majority more tightly. Any future Stage 3 selection should use a generation-based criterion (distinct-output count or CE F1 on a validation subsample), not NLL. Net: the best Stage 3 configuration in this project is **v2 + beam-3 decoding** — CE macro F1 0.176 vs CheXOne-instruct 0.149 on the same images, 3% hallucination, 61% modal share still open.
 
+### 3.7 Stage 3 v2c — findings-conditioned generation (2026-09-21)
+
+**Why.** Sentence attribution (`docs/explainability_evaluation.md` §3) measured that the Stage 3 decoder draws ~1 % of its attention from the 64 visual tokens and re-uses one glance per image for every sentence: the text is written from the language prior. Text is the channel it uses, so v2c puts the classifier's findings *into the prompt*:
+
+> `Generate a radiology findings report for this chest X-ray. Classifier findings: Cardiomegaly, Pleural Effusion.` (or `… Classifier findings: none flagged.`)
+
+Findings come from the 4-seed Stage 2 ensemble (§3.6.1), cached for all 7,426 images (`scripts/cache_stage2_predictions.py` → `stage2_ensemble_predictions.csv`) and thresholded per class at the val-split F1 optimum (`stage2_ensemble_thresholds.json`; 8 classes with ≥10 val positives, val macro F1 0.566 at those thresholds; the other 6 use the median threshold 0.538). Train and test prompts therefore come from one distribution; during training each flagged finding is dropped with p = 0.1 so the decoder cannot simply copy the list. Everything else is the v2 recipe (frozen Stage 2 tower, 64 visual tokens, LoRA r16, 50 % abnormal oversampling, LR 2e-4). **Checkpoint selection** was changed to a generation criterion — clinical-efficacy macro F1 of greedy outputs on a fixed, class-balanced 48-image val subsample — because §3.6.4 showed val NLL selects the collapsed model.
+
+**Run history (stated in full).** Epoch 1 ran 2026-09-21 07:12–08:23 UTC at batch 4 × accum 4 (70.4 min: train loss 1.429, val loss 1.152, val-subsample gen CE F1 0.322, 14/48 distinct). A WSL restart then killed the job. The first resume (`--resume`, same batch) died at the first backward with `CUDA error: unknown error`; `dmesg` shows `dxgkio_make_resident: Ioctl failed: -12` — host-side GPU out-of-memory, because Windows held ~2.8 GB of the 16.3 GB while training needs ~15.9. The second resume used batch 2 × accum 8 (same effective batch 16) and completed epochs 2–3 in **10.8 and 10.4 min each** — versus 70 min for epoch 1 — then early-stopped:
+
+| Epoch | Batch | Train loss | Val loss | Val-subsample gen CE F1 (48 img) | Distinct / 48 | Full-val gen CE F1 (387 img, post hoc) |
+|---|---|---:|---:|---:|---:|---:|
+| **1** | 4 × 4 | 1.429 | 1.152 | **0.322** | 14 | **0.270** |
+| 2 | 2 × 8 | 0.901 | 1.111 | 0.233 | 14 | (weights not kept) |
+| 3 | 2 × 8 | 0.776 | 1.153 | 0.280 | 12 | 0.229 |
+
+`best.pt` = epoch 1 by the pre-registered criterion; re-running the same criterion on the **full** frontal val split (`v2c_full_val_selection.json`) also prefers epoch 1. The 8× speed-up at half the batch size is not a typo: at 15.9/16.3 GB the WSL2 GPU-paravirtualisation layer was paging memory to the host for the whole of epoch 1 (and, in hindsight, probably for v2 and v2b too — 56 and 33 min/epoch). Stage 3 on this machine should run at batch 2 × accum 8.
+
+**Test results** — same 150-image Phase 5 subsample, same scorer (`report_generation_scores_v2c.json`); frontal 70 unless stated. The scorer's macro F1 averages over all 14 classes (three have zero test support and contribute 0). Device hallucination = the §3.4 regex, mention in the generation but not the reference.
+
+| System | CE macro F1 | CE micro F1 | CE macro F1, all 150 | Distinct / 70 | Modal share | Device halluc. | BLEU-4 | ROUGE-L |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| *Classifier's flagged findings as a bare list ("verbalised" ceiling)* | *0.234* | *0.656* | *0.224* | *13* | *0.74* | *0 %* | *0.0* | *0.10* |
+| **v2c (epoch 1, official), greedy** | **0.165** | 0.610 | 0.182 | 13 | 0.74 | **0 %** | 9.2 | 0.29 |
+| v2c (epoch 1), beam 3 + rep. 1.2 | 0.135 | 0.642 | 0.142 | 12 | 0.74 | 0 % | 8.1 | 0.29 |
+| v2c (epoch 1), **findings removed from prompt** (ablation) | 0.057 | 0.590 | 0.057 | **1** | 1.00 | 0 % | 6.7 | 0.29 |
+| v2c epoch 3, greedy — *post hoc, not selected* | 0.231 | 0.651 | 0.191 | 13 | 0.74 | 0 % | 8.7 | 0.29 |
+| v2c epoch 3, beam — *post hoc* | 0.142 | 0.611 | 0.121 | 11 | 0.74 | 0 % | 10.8 | 0.32 |
+| v2 + beam 3 (§3.6.2; the app default) | 0.176 | 0.650 | 0.148 | 14 | 0.61 | 3 % | 8.7 | 0.26 |
+| v2 greedy | 0.152 | 0.575 | 0.119 | 26 | 0.54 | 10 % | 9.8 | 0.28 |
+| CheXOne-instruct (reference) | 0.149 | 0.599 | 0.107 | 36 | 0.26 | 0 % | 10.2 | 0.29 |
+| v2b (§3.6.4) | 0.057 | 0.590 | 0.057 | 1 | 1.00 | 0 % | 6.7 | 0.29 |
+
+Bootstrap over the 70 images (2,000 resamples, macro over supported classes; `report_ce_f1_bootstrap.json`): every system's CE macro F1 has a 95 % CI about ±0.10 wide; v2c-epoch-1 vs v2-beam Δ = −0.01 [−0.13, +0.13]; epoch-3 vs v2-beam Δ = +0.07 [−0.05, +0.20]; the only difference whose CI excludes zero is *verbalised classifier vs v2 beam*, +0.09 [+0.01, +0.16].
+
+**What this says.**
+
+1. **v2c is a verbaliser of the classifier, and nothing else.** With the findings removed from the prompt the same checkpoint emits one sentence for all 150 images (the v2b collapse); with them it reproduces the flagged findings in report prose. Per class it tracks the verbalised ceiling (Cardiomegaly 0.55–0.67, Pleural Effusion 0.40–0.44, Lung Opacity 0.35–0.50 vs ceiling 0.71 / 0.40 / 0.60) and, like the classifier, never produces Lung Lesion, Fracture or Support Devices. The image enters only through the classifier.
+2. **The ceiling is low on this test subsample — 0.234 — and that, not the decoder, is the binding constraint.** The ensemble flags a finding on only 18 of the 70 frontal images at val-optimal thresholds; per-class test support is 1–9; the scorer divides by 14 classes. A perfect verbaliser cannot exceed 0.234 here, so the most v2c could ever add over v2-beam (0.176) is ~0.06 — inside the ±0.10 noise band. The val-split number (0.566 macro F1 over 8 supported classes) shows the same classifier looks far better where support exists; the report metric on 70 images simply cannot resolve it.
+3. **Hallucination is solved by construction**: 0 % device mentions in every v2c variant, versus 3 % (v2 beam) and 10 % (v2 greedy). The decoder no longer needs the "abnormal ⇒ mention a line" shortcut because the abnormality is named in its prompt. This is the one unambiguous gain.
+4. **Greedy beats beam for v2c** (0.165 vs 0.135; 0.231 vs 0.142 at epoch 3) — the opposite of v2. Beam search's length/repetition preferences smooth away the short finding sentences the prompt induces; for a prompt-driven verbaliser there is nothing to de-hallucinate.
+5. **Val and test disagree about epochs 1 and 3** (val 0.270 vs 0.229; test 0.165 vs 0.231). With ±0.10 CIs on test and per-class support of 2–4, this is expected noise, not a signal. Epoch 1 is the official checkpoint because it won on the pre-registered criterion *and* on the full val split; the epoch-3 test number is reported so no one has to trust that decision blindly, and it is labelled post hoc because it is.
+6. **Decision for the app**: v2 + beam remains the default (v2c-epoch-1 does not beat 0.176), and **v2c is offered as a selectable "findings-conditioned, 0 % hallucination" mode** whose prompt is built live from the ensemble's probabilities and the same thresholds (`MedXVLMPipeline.report_instruction`). The app shows the flagged findings it put into the prompt, so a user can see exactly what the report is a verbalisation of.
+
+**Net for RQ3.** Findings-conditioning removes hallucination and turns the report writer into an honest narrator of the classifier — which is what a two-stage clinical system would want — but on this data it cannot lift the clinical-efficacy metric beyond what the classifier alone scores, and on this 70-image subsample that ceiling is 0.234. Improving the report writer now means improving the classifier's recall on rare findings (data), not the decoder.
+
 ## 4. What this does and doesn't change about the project's story
 
 - **The headline classification number is now real.** 0.855/0.862 macro AUROC, blind, on held-out data, against corrected labels, within ~1 point of a published state-of-the-art zero-shot system on the same images. This replaces the 0.865 text-fusion figure, which should no longer be quoted as classification accuracy.
 - **Most of the recovery is data hygiene, not architecture**: fixing the labeler, dropping lateral views, and using a CXR-pretrained encoder took a linear head from 0.57 to ~0.78–0.80; the pipeline design adds the last ~5–8 points. That is an honest and defensible attribution, and the ablation table above is what supports it.
+- **After the v2c run (§3.7, 2026-09-21):** conditioning the report writer on the classifier's findings gives 0 % hallucination and a faithful verbaliser, but CE F1 0.165 (greedy) vs v2-beam 0.176 — inside a ±0.10 noise band whose ceiling on this 70-image subsample is 0.234 (the classifier flags only 18/70). Stage 3 is now limited by classifier recall on rare findings, not by the decoder. App default stays v2 + beam; v2c is selectable.
 - **After the 2026-09-20 overnight run (§3.6):** the honest classification number is **0.837 ± 0.015 (single seed) / 0.868 (4-seed ensemble)** — the ensemble equals RadZero on identical images; the 0.855 quoted earlier was the best seed. The demo app now serves the ensemble. Stage 3's best configuration is v2 + beam-3 decoding (CE F1 0.176, 3% hallucination); v2b showed the 50% abnormal oversampling is essential, and that val NLL selects the collapsed model. Zero-shot rose to 0.734 with finding-sentence training but remains data-scale-limited.
 - **Stage 3 was retrained on 2026-09-19 (§3.4).** The boilerplate collapse documented in `cross_dataset_evaluation.md` §5 is broken (5 → 61 distinct outputs on 150 images) and CE macro F1 now matches CheXOne-instruct on the same images (0.152 vs 0.149, frontal). The cost is a 10% (frontal) device/surgery hallucination rate that the Phase 3 model and CheXOne do not have, and the modal normal report still covers 54% of frontal outputs. The next lever is not more epochs (val loss turned up at epoch 4) but a stronger visual signal or a hallucination-aware training objective — out of scope for this rebuild.
 - **Phase 3 numbers are historical, not wrong-as-recorded**: `training_summary.md` accurately reports what those runs produced *under their protocol*; that protocol (text fusion, noisy labels, all views) is what this rebuild replaced.
@@ -226,7 +274,8 @@ v2b emits one sentence — *"The heart is normal in size. The mediastinum is unr
 ## 5. Files
 
 - Code: `src/medxvlm/data/labeler.py` (negation scope), `src/medxvlm/models/vision_encoder.py` (backbone option), `src/medxvlm/data/dataset.py` (projection filter), `src/medxvlm/models/baseline_classifier.py`, `src/medxvlm/engine/loop_utils.py` (`load_vision_encoder`), `scripts/train_{align,classifier,baseline,report}.py`, `scripts/prepare_data.py`, `scripts/validate_labeler.py`, `scripts/run_v2_rebuild.sh`, `scripts/eval_v2_classification.py`, `scripts/eval_v2_report_generation.py`, `scripts/eval_v2_score_reports.py`, `scripts/eval_external_chestxray14.py`.
-- Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`, `report_gen_v2b.yaml`, `align_v3_sentence.yaml`, `align_v3b_findings.yaml`.
+- Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`, `report_gen_v2b.yaml`, `report_gen_v2c.yaml`, `align_v3_sentence.yaml`, `align_v3b_findings.yaml`.
+- v2c (§3.7): `src/medxvlm/data/findings_prompt.py`, `scripts/cache_stage2_predictions.py`, `scripts/run_v2c_{findings_conditioned,resume,eval_only}.sh`, `runs/v2c_chain.log`, `runs/v2c_resume_chain.log`, `checkpoints/report_gen_v2c/{best,epoch3}.pt`; results `stage2_ensemble_{predictions.csv,thresholds.json}`, `classifier_verbalised_generations.csv`, `medxvlm_stage3_v2c{,_beam3,_nofindings_beam3,_epoch3,_epoch3_beam3}_generations.csv`, `report_generation_scores_v2c.json`, `v2c_full_val_selection.json`, `report_ce_f1_bootstrap.json`.
 - Data: `data/processed/manifest.csv` (corrected); `data/processed/manifest_v1_phase3_labels.csv` (the Phase 3 labels, kept for reproducibility).
 - Checkpoints/logs: `checkpoints/{align,classifier,baseline,report_gen}_v2/`, `runs/{align,classifier,baseline,report_gen}_v2/`, `runs/v2_rebuild.log`, `runs/train_report_gen_v2.log`.
 - Results: `docs/phase5_artifacts/v2/v2_classification_{summary.json,raw.csv}`, `classifier_seed_ensemble.json`, `report_generation_scores_v2_overnight.json`, `medxvlm_stage3_v2{,b}{,_beam3}_generations.csv`, `docs/phase5_artifacts/v2/medxvlm_stage3_v2_generations.csv`, `docs/phase5_artifacts/v2/report_generation_scores_v2.json`, `docs/phase5_artifacts/v2/chestxray14_external_eval_{summary.json,raw.csv}`.

@@ -66,7 +66,7 @@
     <div class="badge">Compared Against 2 Published AI Models</div>
     <div class="badge">Rebuilt &amp; Re-tested Honestly</div>
   </div>
-  <div class="meta">Prepared 2026-09-21 (updated after the explainability evaluation) &nbsp;·&nbsp; Kartik Singh Rana</div>
+  <div class="meta">Prepared 2026-09-21 (updated after the explainability evaluation and the findings-conditioned report writer) &nbsp;·&nbsp; Kartik Singh Rana</div>
 </div>
 
 <section>
@@ -140,11 +140,15 @@
 
 <table>
 <tr><th>System (same 70 front-view test X-rays)</th><th class="num">Clinical-efficacy score</th><th class="num">Different reports produced (of 150)</th><th class="num">Invents catheters / lines that aren't there</th></tr>
-<tr><td><b>MedXVLM, retrained — beam-search decoding</b></td><td class="num"><b>0.176</b></td><td class="num">14 (of 70 front views)</td><td class="num">3% of cases</td></tr>
+<tr><td><b>MedXVLM, retrained — beam-search decoding (the demo's default)</b></td><td class="num"><b>0.176</b></td><td class="num">14 (of 70 front views)</td><td class="num">3% of cases</td></tr>
+<tr><td>MedXVLM "v2c" — told the classifier's findings before writing</td><td class="num">0.165</td><td class="num">13 (of 70)</td><td class="num"><b>0%</b></td></tr>
+<tr><td><i>Ceiling: the classifier's findings written out as a bare list</i></td><td class="num"><i>0.234</i></td><td class="num"><i>13 (of 70)</i></td><td class="num"><i>0%</i></td></tr>
 <tr><td>MedXVLM, retrained — plain (greedy) decoding</td><td class="num">0.152</td><td class="num">26 (of 70)</td><td class="num">10% of cases</td></tr>
 <tr><td>CheXOne (outside AI, off-the-shelf)</td><td class="num">0.149</td><td class="num">36 (of 70)</td><td class="num">0%</td></tr>
 <tr><td>MedXVLM, original</td><td class="num">0.078</td><td class="num">5 (of 70)</td><td class="num">1%</td></tr>
 </table>
+
+<p><b>One more experiment (v2c):</b> since the attention study (section 5) showed the writer barely looks at the image, the classifier's findings were written into its instructions — "Classifier findings: Cardiomegaly, Pleural Effusion." That <b>eliminated invented equipment entirely (0%)</b> and made the report an honest narration of what the classifier found. It did <i>not</i> raise the score (0.165 vs 0.176 — a tie within the measurement noise of ±0.10 on 70 images), and the reason is instructive: even a perfect narrator of the classifier can only score 0.234 on these images, because the classifier itself flags a finding on just 18 of the 70. The report writer is now limited by the classifier's ability to spot rare findings, not by its writing. Take the findings out of the instructions and the same model collapses back to one sentence for every image — proof that the image reaches the report only through the classifier.</p>
 
 <p><b>The good:</b> the collapse is fixed, the score more than doubled, and on this measure the project's model now <b>edges ahead of CheXOne</b> — a 3-billion-parameter system from a Stanford lab. It correctly writes "Cardiomegaly" for enlarged hearts the old model always called normal. A follow-up experiment found that <b>how the text is decoded matters as much as how the model was trained</b>: switching from picking the single most likely next word ("greedy") to considering several candidate sentences at once ("beam search") cut the invented-equipment problem from 10% to 3% and raised the score to 0.176 — with no retraining. A separate test that reduced the "show abnormal cases more often" setting made the model collapse completely again (one identical sentence for all 150 images), which proves that setting was essential.</p>
 
@@ -206,13 +210,14 @@ Both outside systems were <b>actually run</b> on this project's test images — 
 <li><b>The first headline number (87%) was misleading</b> — measured with the answer key; the honest image-only score was 51%. Catching this by testing the hard way is one of the project's most important outcomes.</li>
 <li><b>Root causes were found and fixed</b>: a label-reading bug that mislabelled thousands of normal X-rays, a training setup that leaked the answer, side-view images diluting the data, a non-specialised image encoder — and, for report writing, a "safe answer" collapse.</li>
 <li><b>After the rebuild and the overnight follow-ups:</b> disease-spotting at <b>84% ± 1.5 per model, 87% averaged over four — equal to RadZero</b>; report-writing clinical-efficacy <b>0.176, ahead of CheXOne's 0.149</b>; both on identical test images with identical corrected labels. An earlier single-run figure of 86% was the best of four seeds and should not be quoted alone.</li>
+<li><b>The report writer's ceiling is the classifier:</b> telling it the classifier's findings removes invented equipment completely (0%) but cannot lift the score above what the classifier already knows (a hard cap of 0.234 on the test images); better reports now need better rare-finding detection, i.e. more data.</li>
 <li><b>Explainability is now measured, not assumed:</b> the classifier's heatmaps land inside the radiologist's box on <b>41%</b> of 984 real boxes (random: 7.5%); the report writer, by contrast, barely looks at the image at all.</li>
 <li><b>Open problems, stated plainly:</b> the report writer still gives the same "normal" paragraph for ~6 in 10 front-view images and invents equipment in ~3%; it misses most specific abnormal findings; zero-shot matching sits at 73% vs 87% for RadZero (a data-scale gap); and after the label fix some conditions have very few true test cases (one pneumothorax, five consolidations), so their individual scores are not meaningful.</li>
 </ul>
 
 <h3>What would come next</h3>
 <ol>
-<li>Attack the report writer's remaining collapse: give it the classifier's findings as part of its instructions ("findings-conditioned" generation), and select checkpoints by generation quality rather than training loss (the loss favoured the collapsed model).</li>
+<li>Done: the report writer was given the classifier's findings and checkpoints were chosen by generation quality — it fixed hallucination, and showed the remaining limit is the classifier's recall on rare conditions. The next real step is more labelled examples of those conditions.</li>
 <li>The external-hospital test is done (NIH ChestX-ray14: 71% single model, 72% averaged); a further step would be a second external dataset with different labelling.</li>
 <li>Get more true examples of the rare conditions so their individual scores become meaningful.</li>
 </ol>

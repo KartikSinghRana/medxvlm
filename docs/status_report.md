@@ -1,6 +1,6 @@
 # MedXVLM — Repository Status Report
 
-Generated: 2026-09-18; updated 2026-09-19 (Stage 3 v2), 2026-09-20 (overnight: seed ensemble, decoding sweep, v2b, zero-shot v3/v3b, demo app) and 2026-09-21 (explainability evaluation). By direct inspection of the working tree at `/home/kartik/DNN Project 2/medxvlm`. Every number below cites the file or command it came from. Nothing in this document was estimated.
+Generated: 2026-09-18; updated 2026-09-19 (Stage 3 v2), 2026-09-20 (overnight: seed ensemble, decoding sweep, v2b, zero-shot v3/v3b, demo app) and 2026-09-21 (explainability evaluation; Stage 3 v2c findings-conditioned run). By direct inspection of the working tree at `/home/kartik/DNN Project 2/medxvlm`. Every number below cites the file or command it came from. Nothing in this document was estimated.
 
 ## Plain-language summary
 
@@ -304,6 +304,13 @@ Per-class CE F1, frontal 70 (support; Phase 3 / CheXOne / v2): No Finding (46) 0
 
 The **superseded** Phase 5 scores on the old labels (`docs/phase5_artifacts/report_generation_clinical_efficacy.json`, 2026-09-06): Phase 3 macro F1 0.075 / CheXOne 0.105. METEOR: not computed (no implementation in repo).
 
+### 6.4 v2c — findings-conditioned Stage 3 (2026-09-21; `docs/v2_rebuild.md` §3.7)
+
+- Config `configs/report_gen_v2c.yaml`; prompts from `docs/phase5_artifacts/v2/stage2_ensemble_{predictions.csv,thresholds.json}` (`scripts/cache_stage2_predictions.py`); selection by generation CE F1 on a 48-image val subsample; logs `runs/v2c_chain.log` (epoch 1, 70.4 min, batch 4; job killed by a WSL restart) and `runs/v2c_resume_chain.log` (epochs 2–3 at batch 2 × accum 8, 10.8 + 10.4 min; early-stopped; first resume attempt died of host-side GPU OOM, `dmesg` `dxgkio_make_resident -12`).
+- Checkpoints: `checkpoints/report_gen_v2c/best.pt` = **epoch 1** (val-subsample gen CE F1 0.322; full-val re-check 0.270 vs epoch 3's 0.229, `v2c_full_val_selection.json`); `epoch3.pt` kept for the post-hoc comparison.
+- Test (frontal 70, `report_generation_scores_v2c.json`): v2c greedy **CE macro F1 0.165**, micro 0.610, 13 distinct, modal 0.74, **device hallucination 0 %**; beam 0.135; prompt-without-findings ablation 0.057 with 1 distinct output (pure verbaliser); epoch 3 greedy 0.231 (post hoc, not selected); verbalised-classifier ceiling 0.234 (the ensemble flags only 18/70 images). Bootstrap 95 % CIs ≈ ±0.10 (`report_ce_f1_bootstrap.json`); only "verbalised > v2 beam" (+0.09 [+0.01, +0.16]) excludes zero.
+- App: v2 + beam stays default; v2c selectable (`REPORT_CHECKPOINTS` in `inference.py`; prompt built from live ensemble probabilities + the thresholds JSON); `sanity_check_app.py` 6/6.
+
 ## 7. Explainability outputs
 
 - **Mechanisms implemented (2026-09-21 — `src/medxvlm/explain/saliency.py`, `sentence_attribution.py`):** per-label attention-pooling weights (the original mechanism, `attention_maps.py`), Grad-CAM on the final patch tokens, attention rollout over the DINOv2 tower, text-grounded patch–prompt similarity from any Stage 1 checkpoint, and per-sentence visual attribution for Stage 3 (teacher-forced pass with attention weights exposed). All exposed in `MedXVLMPipeline.heatmaps()` / `.attribute_report()` and in the app.
@@ -428,7 +435,7 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
 |---|---|---|
 | Stage 1 — contrastive alignment | Done (Phase 3 ×2, v2 ×3, v3, v3b) | yes — zero-shot macro AUROC: v2 0.565, **v3b (finding sentences) 0.734**, RadZero 0.868 (`v2_classification_summary.json`); v2 val R@1 ≈ 0.04–0.06 |
 | Stage 2 — classification | Done (v2 image-only; 4 seeds) | yes — **single seed 0.837 ± 0.015; 4-seed ensemble 0.868 (8 shared) / 0.835 (13)**; NIH ensemble 0.719 (`classifier_seed_ensemble.json`) |
-| Stage 3 — report generation | Done — v2 (2026-09-19) + decoding sweep and v2b ablation (2026-09-20) | yes — **v2 + beam-3: CE macro F1 0.176 (frontal), hallucination 3%**; greedy 0.152 / 10%; v2b (30% sampling) collapsed to 1 output (`report_generation_scores_v2_overnight.json`) | yes — v2 CE macro F1 **0.152** (70 frontal) / 0.119 (150) vs CheXOne 0.149 / 0.107; BLEU-4 9.76, ROUGE-L 0.280 (frontal); 61 distinct / 150; val loss 1.132 (ep 3) (`docs/phase5_artifacts/v2/report_generation_scores_v2.json`) |
+| Stage 3 — report generation | Done — v2 (2026-09-19), decoding sweep + v2b ablation (2026-09-20), v2c findings-conditioned (2026-09-21) | yes — **v2 + beam-3: CE macro F1 0.176 (frontal), hallucination 3%** (app default); v2c greedy 0.165 / **0% hallucination**, verbalised-classifier ceiling 0.234, CIs ±0.10 (`report_generation_scores_v2c.json`, `report_ce_f1_bootstrap.json`); greedy v2 0.152 / 10%; v2b collapsed to 1 output | yes — v2 CE macro F1 **0.152** (70 frontal) / 0.119 (150) vs CheXOne 0.149 / 0.107; BLEU-4 9.76, ROUGE-L 0.280 (frontal); 61 distinct / 150; val loss 1.132 (ep 3) (`docs/phase5_artifacts/v2/report_generation_scores_v2.json`) |
 | Explainability | Done (2026-09-21): attention pooling, Grad-CAM, rollout, text-grounded, sentence attribution — all scored | yes — **pointing game on 984 NIH boxes: attention ensemble 41.2 %** vs random 7.5 % / centre 21.5 %; Grad-CAM 19.0 %; text v3b 11.3 %; local-loss on/off 5.3 / 3.8 % (`grounding_chestxray14_summary.json`) |
 | Ablation | Done (local-loss on/off); ASL-vs-BCE not run | yes — Stage 2 macro AUROC 0.8645 vs 0.8648 (text-fusion protocol); Stage 1 R@1 i2t 0.0134 vs 0.0174 (`docs/ablation_study.md`) |
 | External benchmark (RadZero / CheXOne) | Done for RadZero; CheXOne qualitative + one generation run only | yes — RadZero 0.852 (own OpenI subsample), 0.868 (MedXVLM frontal test, corrected labels); CheXOne CE F1 0.105 on 150 MedXVLM images; CheXOne benchmarks: paper-reported only |

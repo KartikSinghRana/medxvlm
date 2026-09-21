@@ -1,0 +1,19 @@
+{
+  "protocol": "greedy, max_new_tokens 96, findings-conditioned prompts, full frontal val split (same scorer as train_report.run_generation_eval)",
+  "n_images": 387,
+  "n_abnormal": 129,
+  "epoch1": {
+    "gen/ce_macro_f1": 0.27005644916483834,
+    "gen/n_distinct": 31.0,
+    "gen/n_images": 387.0,
+    "gen/modal_share": 0.7260981912144703,
+    "seconds": 296.4335412979126
+  },
+  "epoch3": {
+    "gen/ce_macro_f1": 0.2289195144335255,
+    "gen/n_distinct": 34.0,
+    "gen/n_images": 387.0,
+    "gen/modal_share": 0.7338501291989664,
+    "seconds": 309.83147621154785
+  }
+}

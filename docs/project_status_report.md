@@ -22,7 +22,8 @@ Generated 2026-09-21 from direct inspection of the working tree at `medxvlm/`; u
 | Stage 2 image-only classifier (v2), single model | `checkpoints/classifier_v2/{local_on,seed1,seed2,seed3}/best.pt` | **0.837 ± 0.015 macro AUROC** (mean ± std over 4 seeds: 0.855 / 0.833 / 0.839 / 0.819) on the held-out frontal test split (377 images, 8 classes shared with RadZero); 0.804 ± 0.019 over all 13 measurable classes. Source: `docs/phase5_artifacts/v2/classifier_seed_ensemble.json`. The 0.855 quoted in earlier documents is seed 0, the best of the four. |
 | Stage 2, 4-seed probability ensemble | the four checkpoints above, averaged (`src/medxvlm/inference.py` `DEFAULT_CLASSIFIER_ENSEMBLE`) | **0.868 macro AUROC** (8 shared) / 0.867 (5 shared classes with ≥10 positives) / 0.835 (all 13). **RadZero on identical images and labels: 0.868** (0.8684 vs 0.8682). This is what the demo app serves. |
 | Same classifier on an unseen hospital (NIH ChestX-ray14 test split, 8 mapped classes) | same | single seed **0.704 ± 0.009** (seed 0: 0.714); **ensemble 0.719** — the generalisation number. |
-| Stage 3 report generator (v2) with beam-3 + repetition-penalty 1.2 decoding | `checkpoints/report_gen_v2/best.pt` (LoRA + projector, 88 MB); decoding defaults in `inference.py` `DEFAULT_DECODING` | Clinical-efficacy macro F1 **0.176** on 70 frontal test images (CheXOne-instruct: 0.149; same checkpoint with greedy decoding: 0.152); device/surgery hallucination **3 %** of frontal cases (greedy: 10 %); 14 distinct outputs / 70 frontal, modal "normal" report 61 %. Source: `report_generation_scores_v2_overnight.json`, `v2_rebuild.md` §3.6.2. |
+| Stage 3 report generator (v2) with beam-3 + repetition-penalty 1.2 decoding — **app default** | `checkpoints/report_gen_v2/best.pt` (LoRA + projector, 88 MB); decoding defaults in `inference.py` `DEFAULT_DECODING` | Clinical-efficacy macro F1 **0.176** on 70 frontal test images (CheXOne-instruct: 0.149; same checkpoint with greedy decoding: 0.152); device/surgery hallucination **3 %** of frontal cases (greedy: 10 %); 14 distinct outputs / 70 frontal, modal "normal" report 61 %. Source: `report_generation_scores_v2_overnight.json`, `v2_rebuild.md` §3.6.2. |
+| Stage 3 v2c, findings-conditioned (2026-09-21) — selectable in the app | `checkpoints/report_gen_v2c/best.pt` (epoch 1, val-selected by generation CE F1) | CE macro F1 **0.165** greedy (beam 0.135), micro 0.610, **0 % hallucination**; the classifier's flagged findings verbalised as a bare list score 0.234 on the same 70 images (the ceiling; only 18/70 flagged); remove the findings from the prompt and it collapses to 1 output. Bootstrap CIs ±0.10 → not distinguishable from v2. `v2_rebuild.md` §3.7. |
 | Stage 1 zero-shot prompt classifier (v3b, finding-sentence alignment) | `checkpoints/align_v3/findings/best.pt` | **0.734 macro AUROC** (8 shared, positive-prompt scoring); 0.693 on the ≥10-positive classes; 0.652 all 13. Up from 0.565 (v2 report-level) and 0.568 (v3 all-sentence). RadZero zero-shot: 0.868. Source: `v2_classification_summary.json` key `v3b_stage1_findings_zero_shot`. |
 | Stage 1 contrastive alignment (v2) | `checkpoints/align_v2/local_on/best.pt` | Encoder initialiser for the v2 classifier; val loss 4.67 at epoch 7; retrieval R@1 ≈ 0.04–0.06; 0.565 zero-shot (not usable as a classifier). |
 | Rule-based CheXpert labeler | `src/medxvlm/data/labeler.py` | 24/24 validation cases pass (`scripts/validate_labeler.py`); negation-scope bug fixed 2026-09-17. |
@@ -39,7 +40,7 @@ Generated 2026-09-21 from direct inspection of the working tree at `medxvlm/`; u
 
 **Incomplete / not started / superseded:**
 
-- **Stage 3 residual problems are open:** the modal normal report is still 61 % of frontal outputs with beam decoding (54 % greedy); recall is 0 on Lung Lesion, Pneumonia, Fracture, Pleural Other on the test subsample; 3 % device hallucination remains. The identified next lever is findings-conditioned generation with a generation-based selection criterion (§10), not more epochs or a different sampling ratio.
+- **Stage 3 is now bounded by the classifier, not the decoder:** the findings-conditioned v2c removes hallucination (0 %) but cannot exceed what the classifier's own findings score (0.234 on the 70-image subsample, where only 18 images get any flag). Further gains need classifier recall on rare findings (data), which this dataset cannot supply. The v2 default still has 61 % modal share and 3 % hallucination.
 - **Zero-shot gap to RadZero (0.734 vs 0.868)** is assessed as a data-scale limit (900 finding-bearing training images vs RadZero's ~100×), not something further recipe changes will close; the project's classification claim is the supervised head/ensemble.
 - **Phase 3 numbers are superseded.** The 0.865 Stage 2 AUROC in `training_summary.md` was measured with the ground-truth report fused into the classifier; image-only it scores 0.507. The file carries a banner saying so.
 - **ASL-vs-BCE ablation on the baseline:** never run (`docs/ablation_study.md` §"Second ablation").
@@ -127,7 +128,7 @@ Eleven YAMLs: `{baseline,align,classifier,report_gen}.yaml` (Phase 3 recipes), `
 
 | Item | State | What's missing |
 |---|---|---|
-| Stage 3 quality beyond 0.176 | Best configuration identified (v2 + beam-3); v2b closed as negative | Findings-conditioned generation (classifier labels in the prompt) and a generation-based checkpoint criterion; ~4–5 h GPU; needs the owner's go-ahead. |
+| Stage 3 quality beyond 0.176 | Closed: v2c (findings-conditioned, generation-based selection) run 2026-09-21 — 0 % hallucination, CE F1 0.165 vs 0.176, ceiling 0.234 | Nothing decoder-side left that this data can resolve; the metric is capped by classifier recall on rare findings. |
 | Demo app (`app/`) | Done and committed (`39c71e9`, `1b1e168`) | A human browser walkthrough — verified only via `AppTest` and HTTP health. |
 | Report-generation metrics | CE F1, BLEU-4, ROUGE-L done | METEOR, RadGraph/RadCliQ (external model downloads; disk is no longer the blocker). |
 | Labeler | Dominant bug fixed | A residual false-positive pattern ("…no … to suggest large pleural effusion") is documented in `v2_rebuild.md` §3.4 item 6, not fixed. |
@@ -239,11 +240,11 @@ External model weights (HF Hub): `StanfordAIMI/dinov2-base-xray-224` (Apache-2.0
 
 ## 10. Next steps
 
-What remains, in order. Only item 1 needs GPU training and therefore the owner's explicit go-ahead with a duration.
+What remains, in order. Nothing here needs GPU training.
 
-1. **Findings-conditioned Stage 3** (~4–5 h GPU, optional): pass the ensemble's predicted labels into the instruction prompt (`DEFAULT_REPORT_INSTRUCTION` in `dataset.py`) at train and inference time, keep 50 % abnormal sampling, and replace val-NLL selection in `train_report.py` with a generation-based criterion (distinct-output count / CE F1 on a validation subsample). The sentence-attribution result — the decoder attends almost entirely to text — is the measured motivation: giving it the findings as *text* is the channel it actually uses.
-2. **Final report and presentation** (Week 16 of the proposal) — the write-up now has every number it needs, including the explainability chapter.
-3. **Human browser pass of the app** — all five paths are verified headlessly only.
-4. **Labeler residual pattern** — add a regression case for *"no … to suggest <finding>"* to `validate_labeler.py` and extend `SCOPE_RESET_TOKENS`/cue handling; re-run `prepare_data.py` (split is seed-stable, so it will not move).
-5. **Optional**: re-run RadZero on the NIH test split with its own prompts to turn the 0.719-vs-0.804 context into a like-for-like comparison (needs the deleted `radzero_venv` recreated per `external_baseline_reproduction.md` §2; ~1 h GPU inference). RadZero's own similarity maps could also be scored on the same 984 boxes with `eval_grounding_chestxray14.py`'s metrics for a like-for-like grounding comparison.
-6. **RadGraph / RadCliQ** for report generation (~1 GB model download).
+1. **Final report and presentation** (Week 16 of the proposal) — the write-up now has every number it needs, including the explainability chapter and the v2c result (`v2_rebuild.md` §3.7). No GPU work remains on the critical path.
+2. **Human browser pass of the app** — all six paths (incl. the v2c report model) are verified headlessly only.
+3. **Labeler residual pattern** — add a regression case for *"no … to suggest <finding>"* to `validate_labeler.py` and extend `SCOPE_RESET_TOKENS`/cue handling; re-run `prepare_data.py` (split is seed-stable, so it will not move).
+4. **Optional**: re-run RadZero on the NIH test split with its own prompts to turn the 0.719-vs-0.804 context into a like-for-like comparison (needs the deleted `radzero_venv` recreated per `external_baseline_reproduction.md` §2; ~1 h GPU inference). RadZero's own similarity maps could also be scored on the same 984 boxes with `eval_grounding_chestxray14.py`'s metrics for a like-for-like grounding comparison.
+5. **RadGraph / RadCliQ** for report generation (~1 GB model download).
+6. **Ops**: Stage 3 training on this machine should always use batch 2 × grad-accum 8 — the near-cap batch-4 runs were being paged by the WSL2 GPU layer (epoch 70 min vs 10.5 min, `v2_rebuild.md` §3.7).

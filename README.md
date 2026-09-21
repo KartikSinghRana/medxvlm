@@ -145,7 +145,8 @@ PYTHONPATH=src streamlit run app/app.py
   reported number, but the app and eval scripts need the checkpoints: either retrain with the commands in *Training*
   (recipes in `configs/*_v2.yaml`, `align_v3b_findings.yaml`) or copy `checkpoints/` from the original machine.
 - The 4-seed ensemble classifier loads on start (~1.4 GB VRAM); reports use beam-3 decoding by default. Report generation is **off by
-  default** (toggle in the sidebar; loads the 1.5B decoder, ~7 GB VRAM).
+  default** (toggle in the sidebar; loads the 1.5B decoder, ~7 GB VRAM). Two report models: **v2** (image-only prompt, default) and
+  **v2c** (findings-conditioned: the ensemble's flagged findings are written into the prompt; 0% hallucination; the app shows them).
 - Every screen states the measured numbers and the known failure modes
   (thin-support classes are greyed out; device mentions in generated text are
   flagged, since the generator hallucinates them in ~3% of frontal cases with beam decoding, ~10% greedy).
@@ -197,7 +198,7 @@ PYTHONPATH=src streamlit run app/app.py
 
 ## Project status
 
-**Phases 1–5 complete; v2 rebuild complete (2026-09-19); overnight follow-ups and explainability evaluation complete (2026-09-21).**
+**Phases 1–5 complete; v2 rebuild complete (2026-09-19); overnight follow-ups, explainability evaluation and the v2c findings-conditioned Stage 3 complete (2026-09-21). Remaining: final report and presentation.**
 
 - Phase 1 (skeleton, environment, literature review, proposal) and Phase 2
   (model wiring, `scripts/sanity_check_models.py`) — documented in
@@ -218,6 +219,13 @@ PYTHONPATH=src streamlit run app/app.py
 - Overnight 2026-09-20 (`docs/v2_rebuild.md` §3.6): seed ensemble, decoding
   sweep, v2b ablation (30% oversampling collapses), zero-shot v3/v3b
   (finding-sentence training: 0.57 → 0.734).
+- Stage 3 v2c, findings-conditioned generation (2026-09-21, `docs/v2_rebuild.md`
+  §3.7): the classifier ensemble's flagged findings go into the prompt. Result:
+  **0% device hallucination** (v2: 3%), CE F1 0.165 vs v2-beam 0.176 — a wash
+  inside a ±0.10 noise band whose ceiling on the 70-image subsample is 0.234
+  (a perfect verbaliser of the classifier). Stage 3 is now bounded by classifier
+  recall on rare findings, not by the decoder. App default stays v2 + beam; v2c
+  is selectable.
 - Explainability evaluation 2026-09-21
   ([docs/explainability_evaluation.md](docs/explainability_evaluation.md)):
   the classifier's attention maps put their hottest pixel inside the
