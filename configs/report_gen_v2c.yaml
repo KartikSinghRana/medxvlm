@@ -1,0 +1,48 @@
+# v2c Stage 3: findings-conditioned generation. Identical to report_gen_v2.yaml
+# (frozen v2 Stage 2 XrayDINOv2 tower, 64 visual tokens, LoRA r16, 50% abnormal
+# oversampling) except:
+#   * findings_conditioning -- the 4-seed Stage 2 ensemble's flagged findings are
+#     appended to every image's instruction at train and test time
+#     ("... Classifier findings: Cardiomegaly, Pleural Effusion."). Motivation:
+#     sentence attribution measured that the decoder draws ~1% of its attention
+#     from the visual tokens and writes from text (docs/explainability_evaluation.md §3);
+#     text is the channel it uses, so the findings go there.
+#   * select_by: generation -- checkpoint chosen by clinical-efficacy F1 of greedy
+#     generations on a fixed 48-image val subsample, not by val NLL, which picked
+#     the fully collapsed v2b (docs/v2_rebuild.md §3.6.4).
+manifest: data/processed/manifest.csv
+output_dir: checkpoints/report_gen_v2c
+log_dir: runs/report_gen_v2c
+samples_dir: runs/report_gen_v2c/samples
+
+seed: 0
+epochs: 5
+early_stopping_patience: 2
+batch_size: 4
+grad_accum_steps: 4
+num_workers: 2
+lr: 0.0002
+weight_decay: 0.0
+
+vision_checkpoint: checkpoints/classifier_v2/local_on/best.pt
+decoder_name: Qwen/Qwen2.5-1.5B-Instruct
+pooled_grid_size: 8
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+max_new_tokens: 128
+sample_every: 1
+num_samples: 3
+
+projections: [Frontal]
+oversample_abnormal: true
+abnormal_fraction: 0.5
+
+findings_conditioning: true
+findings_predictions: docs/phase5_artifacts/v2/stage2_ensemble_predictions.csv
+findings_thresholds: docs/phase5_artifacts/v2/stage2_ensemble_thresholds.json
+findings_dropout: 0.1          # each flagged finding dropped from the training prompt w.p. 0.1
+
+select_by: generation
+gen_val_images: 48
+gen_max_new_tokens: 96

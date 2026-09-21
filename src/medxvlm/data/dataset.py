@@ -29,7 +29,7 @@ from medxvlm.models.vision_encoder import IMAGE_SIZE
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
-DEFAULT_REPORT_INSTRUCTION = "Generate a radiology findings report for this chest X-ray."
+from medxvlm.data.findings_prompt import DEFAULT_REPORT_INSTRUCTION  # noqa: F401  (single source of truth)
 
 
 class CLAHETransform:
@@ -254,11 +254,15 @@ class ReportGenDataset(Dataset):
         transform: transforms.Compose | None = None,
         instruction: str = DEFAULT_REPORT_INSTRUCTION,
         projections: tuple[str, ...] | None = None,
+        instruction_fn=None,
     ) -> None:
+        """`instruction_fn(filename) -> str` overrides the fixed `instruction` per image
+        (findings-conditioned prompts, `medxvlm.data.findings_prompt.FindingsLookup`)."""
         self.manifest_path = manifest_path
         self.rows = _load_split(manifest_path, split, projections)
         self.transform = transform or build_transforms(split)
         self.instruction = instruction
+        self.instruction_fn = instruction_fn
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -267,4 +271,5 @@ class ReportGenDataset(Dataset):
         row = self.rows.iloc[index]
         image_path = _resolve_image_path(self.manifest_path, row["filename"])
         image = Image.open(image_path).convert("RGB")
-        return self.transform(image), self.instruction, row["report_text"]
+        instruction = self.instruction_fn(row["filename"]) if self.instruction_fn is not None else self.instruction
+        return self.transform(image), instruction, row["report_text"]

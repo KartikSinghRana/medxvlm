@@ -186,28 +186,38 @@ class ReportGenerator(nn.Module):
         )
 
     @torch.no_grad()
-    def generate(self, pixel_values: torch.Tensor, instruction: str, max_new_tokens: int = 128, **generate_kwargs) -> list[str]:
-        """Decode a report per image, given one shared instruction for the batch.
+    def generate(
+        self, pixel_values: torch.Tensor, instruction: str | list[str], max_new_tokens: int = 128, **generate_kwargs
+    ) -> list[str]:
+        """Decode a report per image. `instruction` is one string shared by the batch or one per image.
 
         Greedy by default; `generate_kwargs` (e.g. `num_beams`, `repetition_penalty`,
         `no_repeat_ngram_size`) are passed straight to the decoder's `generate`.
+        Per-image prompts differ in length, so sequences are *left*-padded (with
+        the pad embedding and attention_mask 0) -- the layout a decoder-only LM
+        needs so every prompt ends at the same position before the first new token.
         """
         was_training = self.training
         self.eval()
         device = pixel_values.device
         batch_size = pixel_values.shape[0]
+        instructions = [instruction] * batch_size if isinstance(instruction, str) else list(instruction)
+        assert len(instructions) == batch_size, "one instruction per image (or a single shared string)"
 
         visual_embeds_all = self._visual_embeds(pixel_values)  # [B, V, H]
         embed_layer = self.decoder.get_input_embeddings()
-        prompt_ids = self.tokenizer(
-            self._build_prompt(instruction), add_special_tokens=False, return_tensors="pt"
-        ).input_ids[0].to(device)
-        prefix_ids, suffix_ids = self._split_at_image_token(prompt_ids)
-        prefix_embeds = embed_layer(prefix_ids).unsqueeze(0).expand(batch_size, -1, -1)
-        suffix_embeds = embed_layer(suffix_ids).unsqueeze(0).expand(batch_size, -1, -1)
-
-        inputs_embeds = torch.cat([prefix_embeds, visual_embeds_all, suffix_embeds], dim=1)
-        attention_mask = torch.ones(inputs_embeds.shape[:2], device=device, dtype=torch.long)
+        sequences = []
+        for i, instr in enumerate(instructions):
+            prompt_ids = self.tokenizer(self._build_prompt(instr), add_special_tokens=False, return_tensors="pt").input_ids[0].to(device)
+            prefix_ids, suffix_ids = self._split_at_image_token(prompt_ids)
+            sequences.append(torch.cat([embed_layer(prefix_ids), visual_embeds_all[i], embed_layer(suffix_ids)], dim=0))
+        max_len = max(seq.shape[0] for seq in sequences)
+        pad_embed = embed_layer(torch.tensor([self.tokenizer.pad_token_id], device=device))[0]
+        inputs_embeds = pad_embed.expand(batch_size, max_len, -1).clone()
+        attention_mask = torch.zeros(batch_size, max_len, device=device, dtype=torch.long)
+        for i, seq in enumerate(sequences):
+            inputs_embeds[i, max_len - seq.shape[0]:] = seq
+            attention_mask[i, max_len - seq.shape[0]:] = 1
 
         output_ids = self.decoder.generate(
             inputs_embeds=inputs_embeds,

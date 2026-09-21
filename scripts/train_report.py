@@ -8,6 +8,13 @@ alongside their reference report every `sample_every` epochs, and
 checkpoints only the trainable parameters (projector + LoRA), not the
 ~1.6B frozen decoder weights.
 
+v2c additions (configs/report_gen_v2c.yaml): `findings_conditioning` puts the
+Stage 2 ensemble's flagged findings into each image's instruction
+(`medxvlm.data.findings_prompt`), and `select_by: generation` picks the
+checkpoint by clinical-efficacy F1 of greedy generations on a fixed val
+subsample instead of teacher-forced val loss -- v2b showed val NLL prefers
+the collapsed model (docs/v2_rebuild.md §3.6.4).
+
 Usage:
     python scripts/train_report.py --stage1-checkpoint checkpoints/align/local_on/best.pt
         [--config configs/report_gen.yaml] [--epochs N]
@@ -20,13 +27,18 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from sklearn.metrics import f1_score
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from medxvlm.data.dataset import ReportGenDataset  # noqa: E402
+from medxvlm.data.dataset import ReportGenDataset, labels_to_training_target  # noqa: E402
+from medxvlm.data.findings_prompt import FindingsLookup  # noqa: E402
+from medxvlm.data.labeler import aggregate_report  # noqa: E402
+from medxvlm.models.labels import CHEXPERT_LABELS  # noqa: E402
 from medxvlm.engine.loop_utils import EpochLogger, load_config, load_vision_encoder, set_seed  # noqa: E402
 from medxvlm.models.report_generator import ReportGenerator  # noqa: E402
 
@@ -38,6 +50,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--limit-train-batches", type=int, default=None, help="Smoke-test only: stop each train epoch after N batches.")
+    parser.add_argument("--resume", type=Path, default=None,
+                        help="Continue from a saved trainable checkpoint (last.pt/best.pt): loads projector+LoRA, starts at its epoch+1, "
+                             "keeps its selection score as the incumbent best. Optimizer moments are not saved, so AdamW restarts cold.")
     return parser.parse_args()
 
 
@@ -106,14 +121,54 @@ def run_val_epoch(model: ReportGenerator, loader, device) -> float:
 def save_samples(model: ReportGenerator, loader, device, samples_dir: Path, epoch: int, num_samples: int, max_new_tokens: int) -> None:
     pixel_values, instructions, reports = next(iter(loader))
     pixel_values = pixel_values[:num_samples].to(device)
-    generated = model.generate(pixel_values, instructions[0], max_new_tokens=max_new_tokens)
+    generated = model.generate(pixel_values, list(instructions[:num_samples]), max_new_tokens=max_new_tokens)
 
     samples_dir.mkdir(parents=True, exist_ok=True)
     out_path = samples_dir / f"epoch_{epoch:03d}.txt"
     with open(out_path, "w") as f:
-        for i, (gen, ref) in enumerate(zip(generated, reports[:num_samples])):
-            f.write(f"=== sample {i} ===\nREFERENCE: {ref}\nGENERATED: {gen}\n\n")
+        for i, (gen, ref, instr) in enumerate(zip(generated, reports[:num_samples], instructions[:num_samples])):
+            f.write(f"=== sample {i} ===\nINSTRUCTION: {instr}\nREFERENCE: {ref}\nGENERATED: {gen}\n\n")
     print(f"  wrote {num_samples} generation samples to {out_path}")
+
+
+def _labels_to_binary(labels: dict[str, float]) -> np.ndarray:
+    v = np.array([labels[n] for n in CHEXPERT_LABELS], dtype=float)
+    v = np.where(np.isnan(v), 0.0, v)
+    return np.where(v == -1.0, 1.0, v).astype(int)
+
+
+def make_generation_val_subset(val_dataset: ReportGenDataset, n_images: int, seed: int) -> Subset:
+    """Fixed, class-balanced val subsample for generation-based model selection (half abnormal, half normal)."""
+    rows = val_dataset.rows.reset_index(drop=True)
+    rng = np.random.RandomState(seed)
+    abnormal = np.where(rows["No Finding"] != 1.0)[0]
+    normal = np.where(rows["No Finding"] == 1.0)[0]
+    k = n_images // 2
+    idx = np.concatenate([rng.choice(abnormal, min(k, len(abnormal)), replace=False), rng.choice(normal, min(n_images - k, len(normal)), replace=False)])
+    return Subset(val_dataset, sorted(idx.tolist()))
+
+
+@torch.no_grad()
+def run_generation_eval(model: ReportGenerator, subset: Subset, device, batch_size: int, max_new_tokens: int) -> dict[str, float]:
+    """Greedy-decode the subset and score it the way eval_v2_score_reports.py does: labeler CE macro F1 + distinct count.
+
+    # why greedy and short: this runs every epoch on ~48 images; the ranking
+    # between epochs is what matters, not the absolute number (which is
+    # reported with beam search on the 150-image test subsample afterwards).
+    """
+    model.eval()
+    rows = subset.dataset.rows.reset_index(drop=True).iloc[subset.indices]
+    truth = np.stack([_labels_to_binary({l: r[l] for l in CHEXPERT_LABELS}) for _, r in rows.iterrows()])
+    loader = DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=2, collate_fn=collate)
+    generated: list[str] = []
+    for pixel_values, instructions, _reports in loader:
+        generated.extend(t.strip() for t in model.generate(pixel_values.to(device), list(instructions), max_new_tokens=max_new_tokens))
+    pred = np.stack([_labels_to_binary(aggregate_report(t)) for t in generated])
+    supported = [j for j in range(len(CHEXPERT_LABELS)) if truth[:, j].sum() > 0]
+    macro_f1 = float(np.mean([f1_score(truth[:, j], pred[:, j], zero_division=0) for j in supported]))
+    n_distinct = len(set(generated))
+    return {"gen/ce_macro_f1": macro_f1, "gen/n_distinct": float(n_distinct), "gen/n_images": float(len(generated)),
+            "gen/modal_share": float(max(generated.count(g) for g in set(generated)) / len(generated))}
 
 
 def main() -> int:
@@ -138,17 +193,35 @@ def main() -> int:
 
     manifest = REPO_ROOT / config["manifest"]
     projections = tuple(config["projections"]) if config.get("projections") else None
-    train_dataset = ReportGenDataset(manifest, "train", projections=projections)
+    lookup_train = lookup_eval = None
+    if config.get("findings_conditioning", False):
+        lookup_train = FindingsLookup(REPO_ROOT / config["findings_predictions"], REPO_ROOT / config["findings_thresholds"],
+                                      dropout=config.get("findings_dropout", 0.0), seed=config["seed"])
+        lookup_eval = FindingsLookup(REPO_ROOT / config["findings_predictions"], REPO_ROOT / config["findings_thresholds"], dropout=0.0)
+    train_dataset = ReportGenDataset(
+        manifest, "train", projections=projections,
+        instruction_fn=(lambda f: lookup_train.instruction(f, training=True)) if lookup_train else None,
+    )
     sampler = make_balanced_sampler(train_dataset, config.get("abnormal_fraction", 0.5)) if config.get("oversample_abnormal", False) else None
     train_loader = DataLoader(
         train_dataset,
         batch_size=config["batch_size"], shuffle=sampler is None, sampler=sampler, num_workers=config["num_workers"],
         drop_last=True, collate_fn=collate,
     )
-    val_loader = DataLoader(
-        ReportGenDataset(manifest, "val", projections=projections),
-        batch_size=config["batch_size"], shuffle=False, num_workers=config["num_workers"], collate_fn=collate,
-    )
+    val_dataset = ReportGenDataset(manifest, "val", projections=projections, instruction_fn=lookup_eval.instruction if lookup_eval else None)
+    val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False, num_workers=config["num_workers"], collate_fn=collate)
+    select_by = config.get("select_by", "val_loss")
+    assert select_by in ("val_loss", "generation"), select_by
+    gen_subset = make_generation_val_subset(val_dataset, config.get("gen_val_images", 48), config["seed"]) if select_by == "generation" else None
+
+    start_epoch, resumed = 1, None
+    if args.resume is not None:
+        resumed = torch.load(args.resume, map_location="cpu", weights_only=False)
+        missing, unexpected = model.load_state_dict(resumed["trainable_state_dict"], strict=False)
+        assert all(("lora_" not in m and "projector" not in m) for m in missing), missing
+        assert not unexpected, unexpected
+        start_epoch = int(resumed["epoch"]) + 1
+        print(f"Resumed trainable weights from {args.resume} (epoch {resumed['epoch']}); continuing at epoch {start_epoch}")
 
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     n_trainable = sum(p.numel() for p in trainable_params)
@@ -160,39 +233,60 @@ def main() -> int:
         f"decoder: {config['decoder_name']} | visual tokens: {model.num_visual_tokens} | projections: {projections} | "
         f"train rows: {len(train_dataset)} ({n_abnormal} abnormal) | oversample_abnormal: {sampler is not None} (fraction {config.get('abnormal_fraction', 0.5) if sampler is not None else 'n/a'}) | "
         f"batch {config['batch_size']} x accum {config['grad_accum_steps']} | "
-        f"trainable params: {n_trainable:,} | frozen params: {n_frozen:,}"
+        f"trainable params: {n_trainable:,} | frozen params: {n_frozen:,} | "
+        f"findings_conditioning: {lookup_train is not None} (dropout {config.get('findings_dropout', 0.0)}) | select_by: {select_by}"
+        + (f" on {len(gen_subset)} val images" if gen_subset is not None else "")
     )
+    if lookup_train is not None:
+        print(f"  example train instruction: {train_dataset[0][1]!r}")
 
     output_dir = REPO_ROOT / config["output_dir"]
     logger = EpochLogger(REPO_ROOT / config["log_dir"])
     samples_dir = REPO_ROOT / config["samples_dir"]
     best_val_loss = float("inf")
+    best_score = -float("inf")  # higher is better: -val_loss, or generation CE F1 (tie-break: more distinct outputs)
+    best_epoch = 0
     patience = config.get("early_stopping_patience", 0)
     epochs_since_best = 0
+    if resumed is not None:
+        # The resumed checkpoint is the incumbent: later epochs must beat it to replace best.pt.
+        r_metrics = resumed.get("metrics", {})
+        best_val_loss = float(resumed.get("val_loss", float("inf")))
+        best_score = (r_metrics["gen/ce_macro_f1"] + 1e-4 * r_metrics["gen/n_distinct"]) if (select_by == "generation" and "gen/ce_macro_f1" in r_metrics) else -best_val_loss
+        best_epoch = int(resumed["epoch"])
+        print(f"  incumbent best: epoch {best_epoch}, score {best_score:.4f} ({select_by})")
     start = time.time()
 
-    for epoch in range(1, config["epochs"] + 1):
+    for epoch in range(start_epoch, config["epochs"] + 1):
         train_loss = run_train_epoch(model, train_loader, device, optimizer, config["grad_accum_steps"], args.limit_train_batches)
         val_loss = run_val_epoch(model, val_loader, device)
-        logger.log(epoch, {"train/loss": train_loss, "val/loss": val_loss})
-        print(f"[epoch {epoch}/{config['epochs']}] train_loss={train_loss:.4f} val_loss={val_loss:.4f}")
+        metrics = {"train/loss": train_loss, "val/loss": val_loss}
+        if gen_subset is not None:
+            t_gen = time.time()
+            metrics.update(run_generation_eval(model, gen_subset, device, batch_size=8, max_new_tokens=config.get("gen_max_new_tokens", 96)))
+            metrics["gen/seconds"] = time.time() - t_gen
+        logger.log(epoch, metrics)
+        extra = (f" gen_ce_f1={metrics['gen/ce_macro_f1']:.4f} distinct={int(metrics['gen/n_distinct'])}/{int(metrics['gen/n_images'])} "
+                 f"modal={metrics['gen/modal_share']:.2f} ({metrics['gen/seconds']:.0f}s)") if gen_subset is not None else ""
+        print(f"[epoch {epoch}/{config['epochs']}] train_loss={train_loss:.4f} val_loss={val_loss:.4f}{extra} | {(time.time() - start) / 60:.1f} min", flush=True)
 
         if epoch % config["sample_every"] == 0 or epoch == config["epochs"]:
             save_samples(model, val_loader, device, samples_dir, epoch, config["num_samples"], config["max_new_tokens"])
 
-        save_trainable_checkpoint(output_dir / "last.pt", model, {"epoch": epoch, "config": config})
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            epochs_since_best = 0
-            save_trainable_checkpoint(output_dir / "best.pt", model, {"epoch": epoch, "config": config, "val_loss": best_val_loss})
+        best_val_loss = min(best_val_loss, val_loss)
+        score = (metrics["gen/ce_macro_f1"] + 1e-4 * metrics["gen/n_distinct"]) if select_by == "generation" else -val_loss
+        save_trainable_checkpoint(output_dir / "last.pt", model, {"epoch": epoch, "config": config, "val_loss": val_loss, "metrics": metrics})
+        if score > best_score:
+            best_score, best_epoch, epochs_since_best = score, epoch, 0
+            save_trainable_checkpoint(output_dir / "best.pt", model, {"epoch": epoch, "config": config, "val_loss": val_loss, "metrics": metrics, "select_by": select_by})
         else:
             epochs_since_best += 1
             if patience and epochs_since_best >= patience:
-                print(f"Early stopping: no val loss improvement for {patience} epochs.")
+                print(f"Early stopping: no {select_by} improvement for {patience} epochs.")
                 break
 
     logger.close()
-    print(f"Done in {(time.time() - start) / 60:.1f} min. Best val loss: {best_val_loss:.4f}. Checkpoints in {output_dir}")
+    print(f"Done in {(time.time() - start) / 60:.1f} min. Best epoch {best_epoch} by {select_by} (score {best_score:.4f}); best val loss {best_val_loss:.4f}. Checkpoints in {output_dir}")
     return 0
 
 

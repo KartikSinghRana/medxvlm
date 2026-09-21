@@ -1,0 +1,105 @@
+{
+  "source": "4-seed classifier_v2 ensemble",
+  "split_for_thresholds": "val, Frontal",
+  "n_val_frontal": 387,
+  "min_val_positives": 10,
+  "fallback_threshold": 0.5376758277416229,
+  "thresholds": {
+    "No Finding": 0.5618289113044739,
+    "Cardiomegaly": 0.5989953279495239,
+    "Lung Opacity": 0.5740606784820557,
+    "Lung Lesion": 0.48899248242378235,
+    "Edema": 0.5262295007705688,
+    "Atelectasis": 0.5088250041007996,
+    "Pleural Effusion": 0.549122154712677,
+    "Support Devices": 0.41644585132598877,
+    "Enlarged Cardiomediastinum": 0.5376758277416229,
+    "Consolidation": 0.5376758277416229,
+    "Pneumonia": 0.5376758277416229,
+    "Pneumothorax": 0.5376758277416229,
+    "Pleural Other": 0.5376758277416229,
+    "Fracture": 0.5376758277416229
+  },
+  "per_class": {
+    "No Finding": {
+      "val_positives": 258,
+      "threshold": 0.5618289113044739,
+      "val_f1_at_threshold": 0.8658318425760286,
+      "fallback": false
+    },
+    "Enlarged Cardiomediastinum": {
+      "val_positives": 1,
+      "fallback": true,
+      "threshold": 0.5376758277416229
+    },
+    "Cardiomegaly": {
+      "val_positives": 39,
+      "threshold": 0.5989953279495239,
+      "val_f1_at_threshold": 0.6857142857142857,
+      "fallback": false
+    },
+    "Lung Opacity": {
+      "val_positives": 51,
+      "threshold": 0.5740606784820557,
+      "val_f1_at_threshold": 0.5555555555555555,
+      "fallback": false
+    },
+    "Lung Lesion": {
+      "val_positives": 14,
+      "threshold": 0.48899248242378235,
+      "val_f1_at_threshold": 0.34782608695652173,
+      "fallback": false
+    },
+    "Edema": {
+      "val_positives": 21,
+      "threshold": 0.5262295007705688,
+      "val_f1_at_threshold": 0.6,
+      "fallback": false
+    },
+    "Consolidation": {
+      "val_positives": 8,
+      "fallback": true,
+      "threshold": 0.5376758277416229
+    },
+    "Pneumonia": {
+      "val_positives": 8,
+      "fallback": true,
+      "threshold": 0.5376758277416229
+    },
+    "Atelectasis": {
+      "val_positives": 37,
+      "threshold": 0.5088250041007996,
+      "val_f1_at_threshold": 0.47706422018348627,
+      "fallback": false
+    },
+    "Pneumothorax": {
+      "val_positives": 3,
+      "fallback": true,
+      "threshold": 0.5376758277416229
+    },
+    "Pleural Effusion": {
+      "val_positives": 15,
+      "threshold": 0.549122154712677,
+      "val_f1_at_threshold": 0.5806451612903225,
+      "fallback": false
+    },
+    "Pleural Other": {
+      "val_positives": 4,
+      "fallback": true,
+      "threshold": 0.5376758277416229
+    },
+    "Fracture": {
+      "val_positives": 9,
+      "fallback": true,
+      "threshold": 0.5376758277416229
+    },
+    "Support Devices": {
+      "val_positives": 11,
+      "threshold": 0.41644585132598877,
+      "val_f1_at_threshold": 0.41379310344827586,
+      "fallback": false
+    }
+  },
+  "val_macro_f1_supported_classes": 0.5658037819655595,
+  "n_supported_classes": 8
+}
