@@ -70,6 +70,21 @@ def load_model_card() -> dict:
         card["distinct_v2"] = s["v2_stage3"]["all_150"]["collapse"]["n_distinct"]
     if nih.exists():
         card["nih_auroc_8"] = json.load(open(nih))["macro_auroc_8_mapped_classes"]
+    grounding = ARTIFACTS / "grounding_chestxray14_summary.json"
+    if grounding.exists():
+        g = json.load(open(grounding))
+        pm = g["per_method"]
+        card["grounding"] = {
+            "n_boxes": g["n_boxes"],
+            "attention": pm["stage2_attn_ensemble"]["overall"]["hit_rate"],
+            "gradcam": pm["stage2_gradcam_ensemble"]["overall"]["hit_rate"],
+            "text": pm["text_v3b_findings"]["overall"]["hit_rate"],
+            "random": pm["baseline_random_expected"]["overall"]["hit_rate"],
+            "center": pm["baseline_center"]["overall"]["hit_rate"],
+        }
+    attribution = ARTIFACTS / "sentence_attribution_summary.json"
+    if attribution.exists():
+        card["attribution"] = json.load(open(attribution)).get("indiana_frontal_test", {})
     return card
 
 
@@ -80,6 +95,11 @@ def true_labels(row: pd.Series) -> dict[str, str]:
         v = row[label]
         out[label] = "not mentioned" if pd.isna(v) else {1.0: "positive", 0.0: "negative", -1.0: "uncertain"}[float(v)]
     return out
+
+
+def _pct(card: dict, key: str) -> str:
+    v = card.get("grounding", {}).get(key)
+    return "—" if v is None else f"{v * 100:.0f}%"
 
 
 # ---------------------------------------------------------------- sidebar
@@ -129,7 +149,11 @@ with st.sidebar:
 - Known failure: mentions a device or surgery that is not there in ~10% of frontal cases with greedy decoding, ~3% with beam search (the app default)
 - Zero-shot (prompt-based) classification: best variant 0.734 macro AUROC vs RadZero 0.868 — data-scale-limited, not used by this app
 
-Sources: `docs/v2_rebuild.md`, `docs/status_report.md`.
+**Explainability (pointing game on {card.get('grounding', {}).get('n_boxes', '—')} radiologist boxes, NIH ChestX-ray14)**
+- Heatmap argmax inside the box: attention pooling **{_pct(card, 'attention')}**, Grad-CAM {_pct(card, 'gradcam')}, text-grounded {_pct(card, 'text')} — random point {_pct(card, 'random')}, image centre {_pct(card, 'center')}
+- Generated sentences put only ~{card.get('attribution', {}).get('visual_share_excl_sink_mean_all', float('nan')) * 100:.0f}% of their attention on the image tokens (sentence attribution below) — a measured reason the report writer is weak
+
+Sources: `docs/v2_rebuild.md`, `docs/status_report.md`, `docs/explainability_evaluation.md`.
 """
             )
         else:
@@ -219,19 +243,36 @@ with right:
         st.dataframe(df.set_index("label")[["probability", "ground truth"]].style.format({"probability": "{:.3f}"}), width="stretch", height=300)
 
 # ---------------------------------------------------------------- explainability
-st.subheader("Where the classifier looked")
-st.caption(
-    "Each label has its own learned attention query over the image patches (per-label attention pooling); the heatmap "
-    "is that label's attention weights, upsampled. This is the model's own pooling weights — not Grad-CAM — and it has "
-    "only been spot-checked qualitatively, not validated against radiologist annotations."
-)
+st.subheader("Where the model looked")
+g = card.get("grounding", {})
+METHOD_LABELS = {
+    "attention": f"Attention pooling (classifier's own weights) — {_pct(card, 'attention')} pointing-game accuracy" if g else "Attention pooling (classifier's own weights)",
+    "gradcam": f"Grad-CAM on the patch tokens — {_pct(card, 'gradcam')}" if g else "Grad-CAM on the patch tokens",
+    "text": f"Text-grounded (Stage 1 patch–prompt similarity) — {_pct(card, 'text')}" if g else "Text-grounded (Stage 1 patch–prompt similarity)",
+}
+method = st.radio("Heatmap method", list(METHOD_LABELS), format_func=METHOD_LABELS.get, horizontal=True)
+if g:
+    st.caption(
+        f"Accuracies are the share of {g['n_boxes']} radiologist-drawn boxes (NIH ChestX-ray14, a hospital the model never saw) whose "
+        f"finding the heatmap's hottest pixel lands inside. Baselines on the same boxes: a random point {_pct(card, 'random')}, "
+        f"always the image centre {_pct(card, 'center')}. Details: `docs/explainability_evaluation.md`."
+    )
+else:
+    st.caption("Heatmaps have not been validated against radiologist annotations in this build.")
 default_labels = [l for l, _ in ranked[:3]]
 chosen = st.multiselect("Labels to visualise", CHEXPERT_LABELS, default=default_labels)
 if chosen:
-    cols = st.columns(min(len(chosen), 4))
-    for i, label in enumerate(chosen):
+    try:
+        overlays = pipeline.heatmaps(image, chosen, method=method)
+    except FileNotFoundError as exc:
+        st.warning(f"Checkpoint for this method is missing: {exc}")
+        overlays = {}
+    cols = st.columns(min(len(chosen), 4)) if overlays else []
+    for i, label in enumerate(l for l in chosen if l in overlays):
         with cols[i % len(cols)]:
-            st.image(result.heatmap(label), caption=f"{label} — p = {result.probabilities[label]:.2f}", width="stretch")
+            st.image(overlays[label], caption=f"{label} — p = {result.probabilities[label]:.2f}", width="stretch")
+    if method == "text":
+        st.caption("Text-grounded maps come from the zero-shot alignment head (0.734 AUROC), not the classifier whose probabilities are shown above.")
 
 # ---------------------------------------------------------------- report generation
 st.subheader("Generated findings")
@@ -267,3 +308,15 @@ else:
             "0.152 greedy — low in absolute terms: most specific abnormal findings are still missed; invented devices "
             "appear in ~3% (beam) / ~10% (greedy) of outputs."
         )
+        with st.expander("Sentence attribution — which image regions each sentence attended to", expanded=False):
+            st.caption(
+                "One extra decoder pass over the generated text with attention weights exposed. Each panel is the sentence's "
+                "attention over the 64 visual tokens (8×8 grid); *vis* is the share of that sentence's attention that went to the "
+                "image at all (attention-sink corrected). Low shares mean the sentence came from the language prior, not the image."
+            )
+            explanations = pipeline.attribute_report(image, report.text)
+            if explanations:
+                cols = st.columns(min(len(explanations), 4))
+                for i, e in enumerate(explanations):
+                    with cols[i % len(cols)]:
+                        st.image(e.overlay, caption=f"vis = {e.visual_share:.2f} — {e.sentence}", width="stretch")

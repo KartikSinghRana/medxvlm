@@ -1,6 +1,6 @@
 # MedXVLM — Comprehensive Project Status Report
 
-Generated 2026-09-21 from direct inspection of the working tree at `medxvlm/` (git `1b1e168`, clean). Supersedes the 2026-09-20 version of this file (git `412c3b3`). Companion documents: [`status_report.md`](status_report.md) is the line-by-line sourced inventory of every number and file; [`v2_rebuild.md`](v2_rebuild.md) is the narrative of what changed after Phase 5 and why — its §3.6 covers the 2026-09-20 overnight run that changed the headline numbers below. Where this report states a number, its source is one of those two documents or a file named inline.
+Generated 2026-09-21 from direct inspection of the working tree at `medxvlm/`; updated the same day after the explainability evaluation. Supersedes the 2026-09-20 version of this file (git `412c3b3`). Remote: `github.com/KartikSinghRana/medxvlm` (private). Companion documents: [`status_report.md`](status_report.md) is the line-by-line sourced inventory of every number and file; [`v2_rebuild.md`](v2_rebuild.md) is the narrative of what changed after Phase 5 and why — its §3.6 covers the 2026-09-20 overnight run that changed the headline numbers below. Where this report states a number, its source is one of those two documents or a file named inline.
 
 ---
 
@@ -27,8 +27,9 @@ Generated 2026-09-21 from direct inspection of the working tree at `medxvlm/` (g
 | Stage 1 contrastive alignment (v2) | `checkpoints/align_v2/local_on/best.pt` | Encoder initialiser for the v2 classifier; val loss 4.67 at epoch 7; retrieval R@1 ≈ 0.04–0.06; 0.565 zero-shot (not usable as a classifier). |
 | Rule-based CheXpert labeler | `src/medxvlm/data/labeler.py` | 24/24 validation cases pass (`scripts/validate_labeler.py`); negation-scope bug fixed 2026-09-17. |
 | Two baselines (v2) | `checkpoints/baseline_v2/{vit_base_patch16_224,xraydinov2}/best.pt` | 0.804 / 0.777 macro AUROC on the same test split. |
-| Demo app | `app/app.py` (269 lines) over `src/medxvlm/inference.py` (213 lines) | Upload or pick a test image → ensemble probabilities (thin-support classes greyed), per-label attention heatmaps, optional report generation (lazy-loads ~7 GB; beam decoding default, device-mention warning flag), model card. `scripts/sanity_check_app.py` (headless `streamlit.testing`) passes 4/4. Run: `conda activate ml && streamlit run app/app.py`. |
-| Attention-map explainability | `src/medxvlm/explain/attention_maps.py` | 216 heatmap PNGs under `runs/*/attention_maps/` (120 for the four v2 classifier runs); served live per label in the app; qualitative only. |
+| Demo app | `app/app.py` over `src/medxvlm/inference.py` | Upload or pick a test image → ensemble probabilities (thin-support classes greyed), heatmaps in three methods each labelled with its measured accuracy, optional report generation (lazy-loads ~7 GB; beam decoding default, device-mention warning flag) with per-sentence attribution, model card. `scripts/sanity_check_app.py` (headless `streamlit.testing`) passes 5/5. Run: `conda activate ml && streamlit run app/app.py`. |
+| Explainability — heatmaps, **validated** | `src/medxvlm/explain/saliency.py`; results `docs/phase5_artifacts/v2/grounding_chestxray14_summary.json` | Pointing game on **984 NIH radiologist boxes**: Stage 2 attention pooling (ensemble) **41.2 % [38.1, 44.3]** vs random point 7.5 % / image centre 21.5 %; Grad-CAM 19.0 %; class-agnostic rollout 6.4 %; text-grounded v3b 11.3 %; Phase 3 local-loss on/off 5.3 / 3.8 % (RQ2: no gain). Write-up `docs/explainability_evaluation.md`. |
+| Explainability — sentence attribution | `src/medxvlm/explain/sentence_attribution.py`; `sentence_attribution_summary.json` | Per-sentence visual attention of the Stage 3 generator; see `docs/explainability_evaluation.md` §3 for the measured shares. |
 
 **Negative results, closed (documented, not to be re-run as-is):**
 
@@ -41,15 +42,15 @@ Generated 2026-09-21 from direct inspection of the working tree at `medxvlm/` (g
 - **Stage 3 residual problems are open:** the modal normal report is still 61 % of frontal outputs with beam decoding (54 % greedy); recall is 0 on Lung Lesion, Pneumonia, Fracture, Pleural Other on the test subsample; 3 % device hallucination remains. The identified next lever is findings-conditioned generation with a generation-based selection criterion (§10), not more epochs or a different sampling ratio.
 - **Zero-shot gap to RadZero (0.734 vs 0.868)** is assessed as a data-scale limit (900 finding-bearing training images vs RadZero's ~100×), not something further recipe changes will close; the project's classification claim is the supervised head/ensemble.
 - **Phase 3 numbers are superseded.** The 0.865 Stage 2 AUROC in `training_summary.md` was measured with the ground-truth report fused into the classifier; image-only it scores 0.507. The file carries a banner saying so.
-- **Grad-CAM / attention rollout / text-grounded heatmaps / sentence attribution:** listed in the proposal, never implemented; only Stage 2's own per-label attention weights are visualised.
 - **ASL-vs-BCE ablation on the baseline:** never run (`docs/ablation_study.md` §"Second ablation").
 - **METEOR / RadGraph** for report generation: not computed. BLEU-4 and ROUGE-L are computed but documented as misleading here (they favour collapsed outputs).
-- **Human browser pass of the demo app:** not yet done; verified only headlessly.
+- **Human browser pass of the demo app:** not yet done; verified only headlessly (5 AppTest checks).
+- **In-distribution grounding:** Indiana has no box annotations, so all localisation numbers are out-of-distribution (NIH); no reader study.
 
 **Environmental:**
 
 - **Host disk is healthy again.** The F: drive (466 GB) hit 542 MB free on 2026-09-20 and forced a reboot; ~100 GB was freed inside WSL and the owner compacted the `.vhdx` (193 → 88 GB). `df /mnt/f` now reports 100 GB free; the WSL ext4 image uses 90 GB. `df /` inside WSL still reports a nominal 1 TB and is not the real limit.
-- The overnight runs regenerated 2.7 GB of `last.pt` files (`align_v3/{sentence,findings}`, `classifier_v2/seed{1,2,3}`, `report_gen_v2b`); every earlier `last.pt` was deleted on 2026-09-20. Safe to delete again if space is needed (`best.pt` is what every doc and the app use).
+- All `last.pt` files were deleted (2026-09-21); `checkpoints/` is 9.2 GB of `best.pt` only.
 - No GPU job is running; any further training requires the owner's go-ahead with a duration (standing constraint since 2026-09-20).
 
 ---
@@ -79,21 +80,23 @@ Data flow: `indiana_reports.csv` + `indiana_projections.csv` → `scripts/prepar
 ### `src/medxvlm/eval/metrics.py` (75 lines)
 - `classification_metrics` L17 (per-class + macro AUROC/AUPRC/F1, skipping single-class columns), `retrieval_recall_at_k` L56.
 
-### `src/medxvlm/explain/attention_maps.py` (85 lines)
-- `overlay_attention` L43 — public single-image overlay used by the app; `save_grounding_snapshots` L53 — batch JET heatmaps during training; grid side derived from token count (`_overlay_heatmap` L31), so both 14×14 and 16×16 towers work.
+### `src/medxvlm/explain/`
+- **`attention_maps.py`** (85 lines) — `overlay_attention` L43 (single-image overlay used everywhere), `save_grounding_snapshots` L53 (training-time snapshots); grid side derived from token count, so both 14×14 and 16×16 towers work.
+- **`saliency.py`** (added 2026-09-21) — `attention_pooling_map`, `gradcam_map` (Grad-CAM on the final patch tokens via `torch.autograd.grad`), `attention_rollout` (DINOv2 only; switches the backbone to eager attention), `TextGrounder` / `text_grounded_map` (patch–prompt cosine in the Stage 1 space), `upsample_map`, `minmax`.
+- **`sentence_attribution.py`** (added 2026-09-21) — `attribute_sentences(model, pixel_values, instruction, report)`: teacher-forced decoder pass with `output_attentions=True`, per-sentence mean attention onto the 64 visual-token positions, raw and sink-corrected visual shares.
 
-### `src/medxvlm/inference.py` (213 lines, added 2026-09-20)
-- `MedXVLMPipeline` L91: loads every present member of `DEFAULT_CLASSIFIER_ENSEMBLE` (L37; missing members are skipped and listed in `classifier_meta["skipped"]`), `classify` L180 averages sigmoid probabilities and attention maps across members and returns `ClassificationResult` (L47; `.heatmap(label)` L59), `load_report_generator` L140 lazily builds Stage 3 from `checkpoints/report_gen_v2/best.pt`, `generate_report` L200 applies `DEFAULT_DECODING = {"num_beams": 3, "repetition_penalty": 1.2}` (L43) and attaches honesty flags (`_flag_report` L80, device-term regex).
+### `src/medxvlm/inference.py` (added 2026-09-20, extended 2026-09-21)
+- `MedXVLMPipeline`: loads every present member of `DEFAULT_CLASSIFIER_ENSEMBLE` (missing members are skipped and listed in `classifier_meta["skipped"]`); `classify` averages sigmoid probabilities and attention maps across members (`ClassificationResult.heatmap(label)`); `heatmaps(image, labels, method)` for `HEATMAP_METHODS = ("attention", "gradcam", "text")` — the text method lazily loads `DEFAULT_TEXT_GROUNDING_CHECKPOINT` (`align_v3/findings`); `load_report_generator` lazily builds Stage 3; `generate_report` applies `DEFAULT_DECODING = {"num_beams": 3, "repetition_penalty": 1.2}` and attaches honesty flags; `attribute_report(image, text)` returns per-sentence `SentenceExplanation(sentence, visual_share, overlay)`. The decoder is switched between sdpa (decoding) and eager (attribution) attention as needed.
 
-### `app/app.py` (269 lines, added 2026-09-20)
-- Thin Streamlit view over the pipeline: radio-button input source (upload vs held-out test image with its reference report and true labels), Altair probability bar chart with thin-support classes greyed (Pneumothorax n=1, Pleural Other n=3, Consolidation n=5, Enlarged Cardiomediastinum n=0), per-label attention overlay, optional report generation with a decoding radio (beam default) and the hallucination warning, model card with the numbers in §2.
+### `app/app.py` (added 2026-09-20, extended 2026-09-21)
+- Thin Streamlit view over the pipeline: radio-button input source (upload vs held-out test image with its reference report and true labels), Altair probability bar chart with thin-support classes greyed (Pneumothorax n=1, Pleural Other n=3, Consolidation n=5, Enlarged Cardiomediastinum n=0), heatmap-method radio whose option labels carry the measured pointing-game accuracy read from `grounding_chestxray14_summary.json`, optional report generation with a decoding radio (beam default), the hallucination warning and a sentence-attribution expander, model card with the numbers in §2 (now including grounding and attribution).
 
 ### `scripts/` (3,277 lines total)
 - Data: `download_dataset.py`, `prepare_data.py` (202; `_clean_report_text` strips "XXXX"), `validate_labeler.py` (187; 24 cases), `sanity_check_data.py`, `verify_env.py`.
 - Training: `train_baseline.py` (123), `train_align.py` (225; `text_unit: report|sentence` L142, `findings_only` L148, `make_collate(..., multi_positive)` L54 builds the positive mask from normalised sentence text, `--select-by {recall1,val_loss}` L43, `--freeze-text-encoder` L46, `--run-name`, early stopping), `train_classifier.py` (228; `Stage2Model` L52 with `use_text_fusion` flag, ASL, split LR, cosine, early stopping, `--seed`, `--run-name`), `train_report.py` (200; `make_balanced_sampler` L56 with `abnormal_fraction`, early stopping on val loss, `--limit-train-batches`).
-- Evaluation: `eval_v2_classification.py` (273; all classifiers on the frontal test split + RadZero re-scoring; `load_zero_shot(path, device, mode)` L105 with `POS_TEMPLATES`/`NEG_TEMPLATES` L72–L73; systems include v3/v3b), `eval_classifier_ensemble.py` (138; per-seed spread + probability ensemble, `--nih` for the external split), `eval_v2_report_generation.py` (109; `--num-beams --repetition-penalty --no-repeat-ngram-size --limit --out`), `eval_v2_score_reports.py` (146; CE F1 + BLEU-4 + ROUGE-L + collapse diagnostics; `--extra NAME=PATH`), `eval_external_chestxray14.py` (164; `LABEL_MAP` L60), and the Phase 5 originals `eval_phase5_*.py`.
-- Demo check: `sanity_check_app.py` (104; four `AppTest` paths — cold start, upload, test-image, report generation).
-- Orchestration (bash, all serialised one-GPU-job-at-a-time): `run_phase3_training.sh`, `run_v2_rebuild.sh`, `run_nih_eval_only.sh`, `run_overnight_2026-09-20.sh` + `_part2.sh` (seeds, ensemble eval, decoding sweep, v3), `run_v2b_then_score.sh` (unsets `PYTORCH_CUDA_ALLOC_CONF`), `run_v3b_after_v2b.sh`. `run_nih_then_v2b.sh` is historical — **do not use as-is**: it auto-launches training, which the owner has asked never to happen without a go-ahead.
+- Evaluation: `eval_grounding_chestxray14.py` (pointing game / mass ratio / area-matched IoU of every saliency method on the 984 NIH boxes, with random and centre baselines), `eval_sentence_attribution.py` (visual-attention share of generated sentences on the 70 frontal test images; box-matching test on a stratified NIH sample), `eval_v2_classification.py` (273; all classifiers on the frontal test split + RadZero re-scoring; `load_zero_shot(path, device, mode)` L105 with `POS_TEMPLATES`/`NEG_TEMPLATES` L72–L73; systems include v3/v3b), `eval_classifier_ensemble.py` (138; per-seed spread + probability ensemble, `--nih` for the external split), `eval_v2_report_generation.py` (109; `--num-beams --repetition-penalty --no-repeat-ngram-size --limit --out`), `eval_v2_score_reports.py` (146; CE F1 + BLEU-4 + ROUGE-L + collapse diagnostics; `--extra NAME=PATH`), `eval_external_chestxray14.py` (164; `LABEL_MAP` L60), and the Phase 5 originals `eval_phase5_*.py`.
+- Demo check: `sanity_check_app.py` (five `AppTest` paths — cold start, upload, test-image, heatmap methods, report generation + sentence attribution).
+- Orchestration (bash, all serialised one-GPU-job-at-a-time): `run_phase3_training.sh`, `run_v2_rebuild.sh`, `run_nih_eval_only.sh`, `run_overnight_2026-09-20.sh` + `_part2.sh` (seeds, ensemble eval, decoding sweep, v3), `run_v2b_then_score.sh` (unsets `PYTORCH_CUDA_ALLOC_CONF`), `run_v3b_after_v2b.sh`. `run_nih_then_v2b.sh` is historical and now exits immediately with an explanation (it used to auto-launch training).
 
 ### `configs/`
 Eleven YAMLs: `{baseline,align,classifier,report_gen}.yaml` (Phase 3 recipes), `*_v2.yaml` (current supervised recipes), `report_gen_v2b.yaml` (30 % sampling — collapsed, keep for the record), `align_v3_sentence.yaml` (all-sentence — negative), `align_v3b_findings.yaml` (finding-sentence — the 0.734 zero-shot head).
@@ -113,10 +116,10 @@ Eleven YAMLs: `{baseline,align,classifier,report_gen}.yaml` (Phase 3 recipes), `
 9. **External-model reproduction** — RadZero run from public weights on its own OpenI benchmark (0.852 on a 1,000-image sample) and on MedXVLM's test split (0.868, corrected labels); CheXOne run for generation on 150 images. Every paper-reported number is labelled as such.
 10. **Two-direction cross-dataset evaluation** — their models on our data (Phase 5) and our model on NIH ChestX-ray14 (0.704 ± 0.009 single, 0.719 ensemble).
 11. **Seed-variance reporting** — every headline classification number now carries a mean ± std over four seeds.
-12. **Explainability snapshots** from the classifier's own attention weights, saved every N epochs and served live in the app.
+12. **Explainability, implemented and validated** — attention pooling, Grad-CAM, attention rollout, text-grounded heatmaps and Stage 3 sentence attribution; scored against 984 NIH radiologist boxes (attention ensemble 41 % pointing game vs 7.5 % random) — the proposal's Week-10/13 items and the first measured answers to RQ2 and RQ4.
 13. **Streamlit demo app** with a reusable inference module and a headless test harness (proposal Week 14 deliverable).
-14. **Documentation set** — twelve markdown docs, a sourced status inventory, and a plain-language PDF regenerated 2026-09-20 from `docs/project_summary_plain_language.html`.
-15. **Version control** — six commits (2026-09-19 → 2026-09-20); data/checkpoints/logs excluded by `.gitignore`.
+14. **Documentation set** — thirteen markdown docs (incl. `explainability_evaluation.md`), a sourced status inventory, and a plain-language PDF regenerated 2026-09-20 from `docs/project_summary_plain_language.html`.
+15. **Version control** — pushed to GitHub (`KartikSinghRana/medxvlm`, private, 2026-09-21); data/checkpoints/logs excluded by `.gitignore`.
 
 ---
 
@@ -126,20 +129,16 @@ Eleven YAMLs: `{baseline,align,classifier,report_gen}.yaml` (Phase 3 recipes), `
 |---|---|---|
 | Stage 3 quality beyond 0.176 | Best configuration identified (v2 + beam-3); v2b closed as negative | Findings-conditioned generation (classifier labels in the prompt) and a generation-based checkpoint criterion; ~4–5 h GPU; needs the owner's go-ahead. |
 | Demo app (`app/`) | Done and committed (`39c71e9`, `1b1e168`) | A human browser walkthrough — verified only via `AppTest` and HTTP health. |
-| Grad-CAM / rollout / text-grounded heatmaps | Not started | Design and implementation; `explain/attention_maps.py` is the only explainability code. |
 | Report-generation metrics | CE F1, BLEU-4, ROUGE-L done | METEOR, RadGraph/RadCliQ (external model downloads; disk is no longer the blocker). |
 | Labeler | Dominant bug fixed | A residual false-positive pattern ("…no … to suggest large pleural effusion") is documented in `v2_rebuild.md` §3.4 item 6, not fixed. |
-| Explainability validation | 216 PNGs on disk, 2 spot-checked qualitatively | Any quantitative grounding metric; the v2 snapshots have never been inspected in a doc. |
-| Stale docstrings | Unchanged | `classifier_head.py` L1–L7 still says text fusion is "the next milestone"; `text_encoder.py:68` TODO guards an unexercised fallback (§6). |
-| Disk hygiene | F: at 100 GB free after compaction | Optionally delete the 2.7 GB of overnight `last.pt` files. |
+| Explainability validation | Done out-of-distribution (984 NIH boxes) | In-distribution boxes do not exist for Indiana; a reader study would be the next level of evidence. |
+| Disk hygiene | F: at 100 GB free after compaction; stray `last.pt` files deleted | — |
 
 ---
 
 ## 6. Known issues / bugs
 
-**In code (grep `TODO|FIXME|HACK` over `src/`, `scripts/`, `app/`, `configs/` — two hits, no stubs):**
-- `src/medxvlm/models/classifier_head.py:5` — docstring says *"No text fusion yet … is the next milestone"*. **Stale**: fusion exists at L97–L113 and was the source of the Phase 3 leak; v2 disables it via `use_text_fusion: false`.
-- `src/medxvlm/models/text_encoder.py:68` — `# TODO: swap in PubMedBERT weights if the checkpoint isn't reachable`. The weights do load in this environment; the TODO guards a fallback path that has not been exercised in a real run.
+**In code (grep `TODO|FIXME|HACK` over `src/`, `scripts/`, `app/`, `configs/` — no hits as of 2026-09-21; the two stale docstrings were rewritten).**
 
 **Model / data:**
 1. **Stage 3 residual collapse** — modal normal report = 61 % of frontal outputs with the default beam decoding (54 % greedy); 14 distinct outputs / 70 frontal. Recall 0 on Lung Lesion, Pneumonia, Fracture, Pleural Other in the 150-image test subsample.
@@ -150,12 +149,14 @@ Eleven YAMLs: `{baseline,align,classifier,report_gen}.yaml` (Phase 3 recipes), `
 6. **Zero-shot scoring must match the training text distribution** — pos-minus-neg prompts help the report-level v2 head but hurt v3b (0.734 → 0.605), which never saw negated sentences. Reported mode is pos-only.
 7. **Stage 1 checkpoint selection by recall@1 is noisy** (picked the most-overfit epoch); `--select-by val_loss` exists; the shipped v2 Stage 2 was built on a frozen tower and is unaffected.
 8. **Overfitting sets in early in every stage** (Stage 2 v2 by epoch 9, Stage 3 v2 by epoch 4, v3b by epoch 5) — the ~3k-image regime; early stopping handles it, more epochs will not.
-9. **n-gram metrics mislead here** — BLEU-4/ROUGE-L favour the collapsed Phase 3 model (12.1/0.30 vs 8.7/0.26 for v2 beam); reported, not used to rank.
+9. **Heatmaps are only as good as the classifier**: pointing-game accuracy is at chance for Pneumothorax (4 %) and near it for Nodule (8 %), matching those classes' weak AUROCs; Grad-CAM is markedly worse than the attention-pooling weights on this architecture (19 % vs 41 %); the Stage 1 patch–prompt maps (incl. the local-loss ablation pair) are near or below a random point.
+10. **The report writer barely looks at the image** — see `docs/explainability_evaluation.md` §3 (sentence attribution).
+11. **n-gram metrics mislead here** — BLEU-4/ROUGE-L favour the collapsed Phase 3 model (12.1/0.30 vs 8.7/0.26 for v2 beam); reported, not used to rank.
 
 **Environment / ops (all documented in `v2_rebuild.md` §3.6.4 and the status inventory):**
-10. **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` breaks near-VRAM-cap runs under WSL2** (`CUDA driver error: device not ready` at the first backward). Stage 3 must run without it; `run_v2b_then_score.sh` unsets it.
-11. **`df` inside WSL is not the real free space** — the 2026-09-20 NIH download filled the 466 GB host drive and forced a reboot that killed detached jobs. Check `df /mnt/f` before large downloads.
-12. **Stage 3 epoch time is ~33–56 min** at batch 4 fp32 depending on the sampler; short smoke tests under-estimate it by ~4×.
+12. **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` breaks near-VRAM-cap runs under WSL2** (`CUDA driver error: device not ready` at the first backward). Stage 3 must run without it; `run_v2b_then_score.sh` unsets it.
+13. **`df` inside WSL is not the real free space** — the 2026-09-20 NIH download filled the 466 GB host drive and forced a reboot that killed detached jobs. Check `df /mnt/f` before large downloads.
+14. **Stage 3 epoch time is ~33–56 min** at batch 4 fp32 depending on the sampler; short smoke tests under-estimate it by ~4×.
 
 ---
 
@@ -189,7 +190,7 @@ medxvlm/
 │   ├── raw/                       Indiana CSVs + 7,470 PNGs (14 GB, unversioned)
 │   ├── processed/manifest.csv     current corrected labels; manifest_v1_phase3_labels.csv = old
 │   └── raw_nih/                   download logs only (NIH test images live in ~/.cache/kagglehub, ~10 GB)
-├── checkpoints/                   25 × .pt, 12 GB (19 best.pt + 6 overnight last.pt)
+├── checkpoints/                   19 × best.pt, 9.2 GB
 │   ├── {align,classifier,baseline,report_gen}/        Phase 3
 │   ├── {align,classifier,baseline,report_gen}_v2/     current; classifier_v2/{local_on,seed1,seed2,seed3} = the ensemble
 │   ├── align_v3/{sentence,findings}/                  zero-shot attempts; findings = 0.734
@@ -197,6 +198,7 @@ medxvlm/
 ├── runs/                          metrics.csv + TensorBoard per run; attention_maps/ PNGs (216); *.log incl. overnight chain logs
 ├── docs/
 │   ├── project_status_report.md   this file
+│   ├── explainability_evaluation.md   heatmaps vs 984 NIH boxes; sentence attribution (2026-09-21)
 │   ├── status_report.md           sourced inventory (every number → file)
 │   ├── v2_rebuild.md              what changed post-Phase 5 and why; §3.4 Stage 3, §3.5 NIH, §3.6 overnight
 │   ├── cross_dataset_evaluation.md, external_baseline_reproduction.md, external_repro_feasibility.md
@@ -204,9 +206,10 @@ medxvlm/
 │   ├── literature_review.md, project_proposal.md, environment_check.md
 │   ├── project_summary_plain_language.{html,pdf}   9-page plain-language summary (PDF regenerated 2026-09-20)
 │   └── phase5_artifacts/          raw eval outputs; v2/ holds the current ones (classification summary + raw,
-│                                  classifier_seed_ensemble.json, report scores, 4 generation CSVs, NIH summary + raw)
-├── scripts/                       26 scripts (see §3)
-└── src/medxvlm/{data,engine,eval,explain,models}/ + inference.py   the package (see §3)
+│                                  classifier_seed_ensemble.json, report scores, 4 generation CSVs, NIH summary + raw,
+│                                  grounding_chestxray14_{summary,raw} + grounding_examples/, sentence_attribution_* + examples/)
+├── scripts/                       28 scripts (see §3)
+└── src/medxvlm/{data,engine,eval,explain,models}/ + inference.py   the package (see §3; explain/ now has saliency + sentence_attribution)
 ../external_repro/                 RadZero + CheXOne clones and their eval outputs (venvs deleted 2026-09-20)
 ```
 
@@ -227,7 +230,7 @@ medxvlm/
 | kagglehub | 1.0.2 | dataset download |
 | tensorboard | 2.21.0 | run logging |
 | streamlit | 1.61.1 | demo app + `streamlit.testing` harness |
-| altair | 6.2.2 | app probability chart — **installed but not pinned** in `requirements.txt` (pulled in by streamlit) |
+| altair | 6.2.2 | app probability chart (pinned 2026-09-21) |
 | weasyprint / pypdf | 69.0 / 6.16.2 | installed in env, not pinned — PDF generation/verification |
 
 External model weights (HF Hub): `StanfordAIMI/dinov2-base-xray-224` (Apache-2.0), `microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext`, `Qwen/Qwen2.5-1.5B-Instruct`, `microsoft/BiomedCLIP-…` (Phase 3 only), `Deepnoid/RadZero` (CC BY-NC 4.0), `StanfordAIMI/CheXOne` (cache deleted 2026-09-20; re-downloadable).
@@ -236,14 +239,11 @@ External model weights (HF Hub): `StanfordAIMI/dinov2-base-xray-224` (Apache-2.0
 
 ## 10. Next steps
 
-Ordered by how directly they follow from the code and open issues. Items 1–2 need GPU time and therefore the owner's explicit go-ahead with a duration.
+What remains, in order. Only item 1 needs GPU training and therefore the owner's explicit go-ahead with a duration.
 
-1. **Findings-conditioned Stage 3** (~4–5 h GPU): pass the ensemble's predicted labels into the instruction prompt (`DEFAULT_REPORT_INSTRUCTION` in `dataset.py`) at train and inference time, keep 50 % abnormal sampling, and replace val-NLL selection in `train_report.py` with a generation-based criterion (distinct-output count / CE F1 on a validation subsample). This is the only remaining lever aimed squarely at the 61 % modal share.
-2. **Optional**: re-run RadZero on the NIH test split with its own prompts to turn the 0.719-vs-0.804 context into a like-for-like comparison (needs the deleted `radzero_venv` recreated per `external_baseline_reproduction.md` §2; ~1 h GPU).
-3. **Fix the two stale TODOs**: rewrite the `classifier_head.py` module docstring (L1–L7) to describe the fusion path and why v2 disables it; either exercise or remove the `text_encoder.py:68` fallback TODO.
-4. **Pin `altair`** in `requirements.txt` (the app imports it directly).
-5. **Human browser pass of the app** — the ensemble/beam defaults have only been checked headlessly.
-6. **Labeler residual pattern** — add a regression case for *"no … to suggest <finding>"* to `validate_labeler.py` and extend `SCOPE_RESET_TOKENS`/cue handling; re-run `prepare_data.py` (split is seed-stable, so it will not move).
-7. **Quantitative grounding check** — the v2 attention-map PNGs have never been looked at in a doc; at minimum a documented spot-check, ideally a pointing-game score against a few hand-drawn boxes.
-8. **RadGraph / RadCliQ** for report generation (~1 GB model download; disk is no longer a blocker).
-9. **Housekeeping**: delete the 2.7 GB of overnight `last.pt` files; drop `run_nih_then_v2b.sh` or mark it clearly as historical.
+1. **Findings-conditioned Stage 3** (~4–5 h GPU, optional): pass the ensemble's predicted labels into the instruction prompt (`DEFAULT_REPORT_INSTRUCTION` in `dataset.py`) at train and inference time, keep 50 % abnormal sampling, and replace val-NLL selection in `train_report.py` with a generation-based criterion (distinct-output count / CE F1 on a validation subsample). The sentence-attribution result — the decoder attends almost entirely to text — is the measured motivation: giving it the findings as *text* is the channel it actually uses.
+2. **Final report and presentation** (Week 16 of the proposal) — the write-up now has every number it needs, including the explainability chapter.
+3. **Human browser pass of the app** — all five paths are verified headlessly only.
+4. **Labeler residual pattern** — add a regression case for *"no … to suggest <finding>"* to `validate_labeler.py` and extend `SCOPE_RESET_TOKENS`/cue handling; re-run `prepare_data.py` (split is seed-stable, so it will not move).
+5. **Optional**: re-run RadZero on the NIH test split with its own prompts to turn the 0.719-vs-0.804 context into a like-for-like comparison (needs the deleted `radzero_venv` recreated per `external_baseline_reproduction.md` §2; ~1 h GPU inference). RadZero's own similarity maps could also be scored on the same 984 boxes with `eval_grounding_chestxray14.py`'s metrics for a like-for-like grounding comparison.
+6. **RadGraph / RadCliQ** for report generation (~1 GB model download).

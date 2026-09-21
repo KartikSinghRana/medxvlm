@@ -9,8 +9,11 @@ exception and produces the elements a user would see:
   2. switch to the upload source -> uploader shown, clean stop, no override
   3. pick a held-out test image -> probabilities chart, ground-truth table,
      attention heatmaps appear
-  4. enable report generation -> generator loads, "Generate findings" runs,
-     report text appears (skipped with --no-generator to keep it light)
+  4. switch the heatmap method to Grad-CAM and text-grounded -> overlays
+     still render (text-grounded lazily loads the Stage 1 checkpoint)
+  5. enable report generation -> generator loads, "Generate findings" runs,
+     report text and per-sentence attribution panels appear (skipped with
+     --no-generator to keep it light)
 
 Follows the repo's sanity_check_*.py convention: prints PASS/FAIL per check,
 exit code 1 on any failure.
@@ -70,6 +73,18 @@ def check_test_image_path(at: AppTest) -> None:
     print(f"[PASS] test-image path: chart, ground-truth table and {len(at.multiselect[0].value)} default heatmap labels rendered")
 
 
+def check_heatmap_methods(at: AppTest) -> None:
+    method_radio = [r for r in at.radio if r.label == "Heatmap method"]
+    assert method_radio, "heatmap-method radio missing"
+    n_before = len(at.get("imgs"))
+    for method in ("gradcam", "text", "attention"):
+        method_radio[0].set_value(method).run(timeout=180)
+        _fail_on_exception(at, f"heatmap method {method}")
+        assert len(at.get("imgs")) >= n_before, f"{method}: fewer images rendered than before ({len(at.get('imgs'))} < {n_before})"
+        assert not [w for w in at.warning if "Checkpoint for this method is missing" in w.value], f"{method}: checkpoint missing"
+    print("[PASS] heatmap methods: attention, Grad-CAM and text-grounded overlays all render")
+
+
 def check_report_generation(at: AppTest) -> None:
     at.toggle[0].set_value(True).run(timeout=180)
     _fail_on_exception(at, "enable report generation")
@@ -79,7 +94,11 @@ def check_report_generation(at: AppTest) -> None:
     _fail_on_exception(at, "generate findings")
     body = " ".join(m.value for m in at.markdown) + " ".join(getattr(w, "value", "") for w in at.get("text"))
     assert "Model" in body or any("Reference" in m.value for m in at.markdown), "generated-report section missing"
-    print("[PASS] report generation: decoder loaded, findings generated and rendered")
+    expanders = [e for e in at.expander if "Sentence attribution" in e.label]
+    assert expanders, "sentence-attribution expander missing"
+    captions = [c.value for c in expanders[0].caption] if hasattr(expanders[0], "caption") else []
+    assert any("attention weights exposed" in c for c in captions), "sentence-attribution explanation missing"
+    print("[PASS] report generation: decoder loaded, findings generated, sentence attribution rendered")
 
 
 def main() -> int:
@@ -90,7 +109,8 @@ def main() -> int:
     at = AppTest.from_file(str(APP), default_timeout=180)
     at.run()
     failures = 0
-    for check in (check_cold_start, check_upload_path_renders, check_test_image_path) + (() if args.no_generator else (check_report_generation,)):
+    checks = (check_cold_start, check_upload_path_renders, check_test_image_path, check_heatmap_methods)
+    for check in checks + (() if args.no_generator else (check_report_generation,)):
         try:
             check(at)
         except AssertionError as exc:

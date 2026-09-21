@@ -1,0 +1,152 @@
+{
+  "decoding": {
+    "num_beams": 3,
+    "repetition_penalty": 1.2
+  },
+  "checkpoint": {
+    "epoch": 3,
+    "val_loss": 1.1321420780162221,
+    "decoder": "Qwen/Qwen2.5-1.5B-Instruct",
+    "visual_tokens": 64,
+    "vision_checkpoint": "checkpoints/classifier_v2/local_on/best.pt"
+  },
+  "indiana_frontal_test": {
+    "n_images": 377,
+    "n_sentences": 2032,
+    "uniform_visual_share_reference": "64 visual tokens out of ~120 attended positions would give ~0.5 if attention were uniform",
+    "by_sentence_kind": {
+      "negation": {
+        "n_sentences": 459,
+        "visual_share_mean": 0.007177888478653623,
+        "visual_share_excl_sink_mean": 0.012889816916764822,
+        "prompt_text_share_mean": 0.09859773151430429,
+        "map_entropy_norm_mean": 0.9276808392508098
+      },
+      "other": {
+        "n_sentences": 1473,
+        "visual_share_mean": 0.006460188721570275,
+        "visual_share_excl_sink_mean": 0.012166225002384356,
+        "prompt_text_share_mean": 0.11177750278797914,
+        "map_entropy_norm_mean": 0.9247018825983564
+      },
+      "positive": {
+        "n_sentences": 100,
+        "visual_share_mean": 0.013679156987927854,
+        "visual_share_excl_sink_mean": 0.026788554873783142,
+        "prompt_text_share_mean": 0.0998690090328455,
+        "map_entropy_norm_mean": 0.8786254131793976
+      }
+    },
+    "visual_share_excl_sink_mean_all": 0.01304927700821138,
+    "visual_share_excl_sink_p90": 0.020029316283762456
+  },
+  "nih_boxes": {
+    "n_images": 310,
+    "n_boxes": 320,
+    "per_class_sampled": 40,
+    "n_mentioning_sentences_total": 97,
+    "hit_rate_overall": 0.5463917525773195,
+    "hit_ci95_overall": [
+      0.44743914347874386,
+      0.6418097379352757
+    ],
+    "center_hit_rate_overall": 0.31958762886597936,
+    "mass_ratio_mean_overall": 2.8363436792702936,
+    "per_class": {
+      "Atelectasis": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 17,
+        "hit_rate": 0.23529411764705882,
+        "hit_ci95": [
+          0.0955488907167594,
+          0.47262245889171595
+        ],
+        "center_hit_rate": 0.058823529411764705,
+        "mass_ratio_mean": 3.0827222677708153
+      },
+      "Cardiomegaly": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 28,
+        "hit_rate": 0.8928571428571429,
+        "hit_ci95": [
+          0.7280377463234293,
+          0.9628823079452005
+        ],
+        "center_hit_rate": 1.0,
+        "mass_ratio_mean": 3.153530316728438
+      },
+      "Effusion": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 7,
+        "hit_rate": 0.42857142857142855,
+        "hit_ci95": [
+          0.15821692226262685,
+          0.7495457695909742
+        ],
+        "center_hit_rate": 0.0,
+        "mass_ratio_mean": 1.691031003291021
+      },
+      "Infiltrate": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 40,
+        "hit_rate": 0.5,
+        "hit_ci95": [
+          0.35199278797099753,
+          0.6480072120290025
+        ],
+        "center_hit_rate": 0.05,
+        "mass_ratio_mean": 2.804911879580376
+      },
+      "Mass": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 0,
+        "hit_rate": null,
+        "hit_ci95": null,
+        "center_hit_rate": null,
+        "mass_ratio_mean": null
+      },
+      "Nodule": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 2,
+        "hit_rate": 0.0,
+        "hit_ci95": [
+          0.0,
+          0.6576280471103807
+        ],
+        "center_hit_rate": 0.0,
+        "mass_ratio_mean": 1.586960227181178
+      },
+      "Pneumonia": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 1,
+        "hit_rate": 1.0,
+        "hit_ci95": [
+          0.20654329147389294,
+          1.0
+        ],
+        "center_hit_rate": 0.0,
+        "mass_ratio_mean": 2.1514658875812405
+      },
+      "Pneumothorax": {
+        "n_boxes": 40,
+        "n_mentioning_sentences": 2,
+        "hit_rate": 0.0,
+        "hit_ci95": [
+          0.0,
+          0.6576280471103807
+        ],
+        "center_hit_rate": 0.0,
+        "mass_ratio_mean": 2.530565460261342
+      }
+    }
+  },
+  "map_similarity": {
+    "n_images": 60,
+    "within_report_pairwise_corr_mean": 0.913852630612292,
+    "within_report_pairwise_corr_median": 0.9323494561069283,
+    "n_within_pairs": 800,
+    "across_image_pairwise_corr_mean": 0.6030596532599902,
+    "across_image_pairwise_corr_median": 0.6301030935408771,
+    "note": "Pearson correlation between 64-dim sentence maps: within one report (different sentences, same image) vs across images (mean map per image). High within-report similarity = the visual glance does not depend on what is being written."
+  }
+}

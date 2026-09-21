@@ -89,6 +89,23 @@ def load_vision_encoder(checkpoint_path: str | Path, device: torch.device):
     return vision_encoder.to(device)
 
 
+def load_stage1_alignment(checkpoint_path: str | Path, device: torch.device):
+    """Load a full trained Stage 1 `ContrastiveAlignment` (both towers + both projections).
+
+    `load_stage1_encoders` drops the projections; text-grounded heatmaps need
+    them, because the patch-word similarity lives in the shared 512-d space.
+    """
+    from medxvlm.models.alignment import ContrastiveAlignment
+
+    vision_encoder, text_encoder = load_stage1_encoders(checkpoint_path, device)
+    state = load_checkpoint(checkpoint_path)["model_state_dict"]
+    model = ContrastiveAlignment(vision_encoder, text_encoder)
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    assert not [k for k in missing if not k.startswith(("vision_encoder.", "text_encoder."))], missing
+    assert not unexpected, unexpected
+    return model.to(device).eval()
+
+
 class EpochLogger:
     """Writes each epoch's scalars to both TensorBoard and a plain CSV.
 

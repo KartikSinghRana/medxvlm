@@ -23,8 +23,10 @@ import torch
 from PIL import Image
 
 from medxvlm.data.dataset import DEFAULT_REPORT_INSTRUCTION, build_transforms
-from medxvlm.engine.loop_utils import load_checkpoint, load_vision_encoder
+from medxvlm.engine.loop_utils import load_checkpoint, load_stage1_alignment, load_vision_encoder
+from medxvlm.explain import saliency
 from medxvlm.explain.attention_maps import overlay_attention
+from medxvlm.explain.sentence_attribution import SentenceAttribution, attribute_sentences
 from medxvlm.models.classifier_head import ClassifierHead
 from medxvlm.models.labels import CHEXPERT_LABELS
 from medxvlm.models.report_generator import ReportGenerator
@@ -41,6 +43,11 @@ DEFAULT_REPORT_CHECKPOINT = REPO_ROOT / "checkpoints" / "report_gen_v2" / "best.
 # Beam search + mild repetition penalty: CE F1 0.152 -> 0.176 and device hallucination
 # 10% -> 3% on the same checkpoint (docs/v2_rebuild.md §3.6.2). Greedy was the wrong default.
 DEFAULT_DECODING = {"num_beams": 3, "repetition_penalty": 1.2}
+# Stage 1 checkpoint behind the text-grounded heatmaps (the 0.734 zero-shot head, docs/v2_rebuild.md §3.6.3).
+DEFAULT_TEXT_GROUNDING_CHECKPOINT = REPO_ROOT / "checkpoints" / "align_v3" / "findings" / "best.pt"
+# Heatmap methods offered by `heatmaps()`; pointing-game accuracy on the 984 NIH ChestX-ray14 boxes is in
+# docs/phase5_artifacts/v2/grounding_chestxray14_summary.json (attention 41%, Grad-CAM 19%, text 11%; random 7.5%).
+HEATMAP_METHODS = ("attention", "gradcam", "text")
 
 
 @dataclass
@@ -68,6 +75,13 @@ class ReportResult:
     max_new_tokens: int
     decoding: dict = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)  # honesty flags for the UI, e.g. device-mention warning
+
+
+@dataclass
+class SentenceExplanation:
+    sentence: str
+    visual_share: float  # attention mass on the 64 visual tokens, sink-corrected (0-1)
+    overlay: np.ndarray  # RGB uint8 heatmap of that sentence's visual attention
 
 
 # Terms the v2 generator is known to hallucinate (docs/v2_rebuild.md §3.4: 10% of
@@ -114,6 +128,8 @@ class MedXVLMPipeline:
         self.classifier_meta = dict(self.classifier_meta, n_models=len(present), skipped=[str(p) for p in paths if p not in present])
         self.report_generator: ReportGenerator | None = None
         self.report_meta: dict = {}
+        self.text_grounder: saliency.TextGrounder | None = None
+        self.text_grounding_checkpoint = DEFAULT_TEXT_GROUNDING_CHECKPOINT
         if load_report_generator:
             self.load_report_generator()
 
@@ -172,6 +188,20 @@ class MedXVLMPipeline:
         if self.device.type == "cuda":
             torch.cuda.empty_cache()
 
+    def load_text_grounder(self) -> saliency.TextGrounder:
+        """Lazily load the Stage 1 alignment used for prompt -> patch similarity maps (~1 GB VRAM)."""
+        if self.text_grounder is None:
+            if not self.text_grounding_checkpoint.exists():
+                raise FileNotFoundError(self.text_grounding_checkpoint)
+            self.text_grounder = saliency.TextGrounder(load_stage1_alignment(self.text_grounding_checkpoint, self.device), self.device)
+        return self.text_grounder
+
+    def _set_decoder_attention(self, implementation: str) -> None:
+        # sdpa for decoding speed, eager when attention weights must be read back (sentence attribution)
+        base = self.report_generator.decoder.get_base_model()
+        if base.config._attn_implementation != implementation:
+            base.set_attn_implementation(implementation)
+
     # ---- inference ---------------------------------------------------------
     def preprocess(self, image: Image.Image) -> torch.Tensor:
         return self.transform(image.convert("RGB"))
@@ -196,11 +226,45 @@ class MedXVLMPipeline:
             n_models=n,
         )
 
+    def heatmaps(self, image: Image.Image, labels: Sequence[str], method: str = "attention") -> dict[str, np.ndarray]:
+        """Label -> RGB overlay for one of `HEATMAP_METHODS`.
+
+        "attention": Stage 2's per-label attention weights, averaged over the ensemble (what `classify()` returns).
+        "gradcam":   Grad-CAM on the final patch tokens, averaged over the ensemble.
+        "text":      cosine similarity of each patch to the prompt "There is <label>." in the Stage 1 space.
+        """
+        if method not in HEATMAP_METHODS:
+            raise ValueError(f"method must be one of {HEATMAP_METHODS}, got {method!r}")
+        pixel_values = self.preprocess(image)
+        batch = pixel_values.unsqueeze(0).to(self.device)
+        idx = [CHEXPERT_LABELS.index(l) for l in labels]
+        if method == "attention":
+            maps = torch.stack([saliency.attention_pooling_map(v, h, batch)[0, idx] for v, h, _ in self.classifiers]).mean(0)
+        elif method == "gradcam":
+            maps = torch.stack([saliency.gradcam_map(v, h, batch, idx)[0] for v, h, _ in self.classifiers]).mean(0)
+        else:
+            grounder = self.load_text_grounder()
+            maps = grounder.map(batch, grounder.embed_prompts([f"There is {l.lower()}." for l in labels]))[0]
+        return {label: overlay_attention(pixel_values, maps[i].cpu()) for i, label in enumerate(labels)}
+
+    @torch.no_grad()
+    def attribute_report(self, image: Image.Image, text: str) -> list[SentenceExplanation]:
+        """Per-sentence visual attention of the generator for an already generated `text` (one extra decoder pass)."""
+        if self.report_generator is None:
+            self.load_report_generator()
+        pixel_values = self.preprocess(image)
+        self._set_decoder_attention("eager")
+        atts: list[SentenceAttribution] = attribute_sentences(
+            self.report_generator, pixel_values.unsqueeze(0).to(self.device), DEFAULT_REPORT_INSTRUCTION, text
+        )
+        return [SentenceExplanation(a.sentence, a.visual_share_excl_sink, overlay_attention(pixel_values, a.visual_map)) for a in atts]
+
     @torch.no_grad()
     def generate_report(self, image: Image.Image, max_new_tokens: int = 128, decoding: dict | None = None) -> ReportResult:
         if self.report_generator is None:
             self.load_report_generator()
         assert self.report_generator is not None, "no report checkpoint configured"
+        self._set_decoder_attention("sdpa")
         decoding = DEFAULT_DECODING if decoding is None else decoding
         pixel_values = self.preprocess(image).unsqueeze(0).to(self.device)
         text = self.report_generator.generate(pixel_values, DEFAULT_REPORT_INSTRUCTION, max_new_tokens=max_new_tokens, **decoding)[0].strip()

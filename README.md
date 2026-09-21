@@ -149,6 +149,10 @@ PYTHONPATH=src streamlit run app/app.py
 - Every screen states the measured numbers and the known failure modes
   (thin-support classes are greyed out; device mentions in generated text are
   flagged, since the generator hallucinates them in ~3% of frontal cases with beam decoding, ~10% greedy).
+- Heatmaps come in three flavours — the classifier's attention pooling,
+  Grad-CAM, and Stage 1 text-grounded similarity — each labelled with its
+  measured pointing-game accuracy on 984 radiologist boxes (41% / 19% / 11%;
+  random 7.5%). Generated reports get per-sentence attribution maps.
 - All inference logic is in `src/medxvlm/inference.py` (`MedXVLMPipeline`);
   the app is a thin view over it.
 - Headless functional check (no browser needed):
@@ -180,14 +184,20 @@ PYTHONPATH=src streamlit run app/app.py
 - [docs/v2_rebuild.md](docs/v2_rebuild.md) — the post-Phase-5 rebuild: labeler
   negation-scope fix, image-only Stage 2 on XrayDINOv2, Stage 3 retrain with
   abnormal oversampling; all current numbers and their caveats.
+- [docs/explainability_evaluation.md](docs/explainability_evaluation.md) —
+  heatmaps scored against 984 NIH radiologist boxes (attention pooling 41%
+  pointing-game vs 7.5% random; Grad-CAM, rollout and text-grounded maps
+  compared; RQ2/RQ4 answered) and sentence attribution for the report writer.
 - [docs/status_report.md](docs/status_report.md) — sourced, section-by-section
   inventory of every checkpoint, log, metric and known issue in the repo.
+- [docs/project_status_report.md](docs/project_status_report.md) — structured
+  status report: what works, what is incomplete, architecture, next steps.
 - [docs/project_summary_plain_language.pdf](docs/project_summary_plain_language.pdf)
   — the whole story for a non-expert reader (HTML source alongside).
 
 ## Project status
 
-**Phases 1–5 complete; v2 rebuild complete (2026-09-19).**
+**Phases 1–5 complete; v2 rebuild complete (2026-09-19); overnight follow-ups and explainability evaluation complete (2026-09-21).**
 
 - Phase 1 (skeleton, environment, literature review, proposal) and Phase 2
   (model wiring, `scripts/sanity_check_models.py`) — documented in
@@ -208,8 +218,16 @@ PYTHONPATH=src streamlit run app/app.py
 - Overnight 2026-09-20 (`docs/v2_rebuild.md` §3.6): seed ensemble, decoding
   sweep, v2b ablation (30% oversampling collapses), zero-shot v3/v3b
   (finding-sentence training: 0.57 → 0.734).
+- Explainability evaluation 2026-09-21
+  ([docs/explainability_evaluation.md](docs/explainability_evaluation.md)):
+  the classifier's attention maps put their hottest pixel inside the
+  radiologist's box on **41%** of 984 NIH boxes (random 7.5%, centre 21.5%);
+  Grad-CAM 19%, class-agnostic rollout at chance; the local patch-word loss
+  (RQ2) gives no measurable grounding at this scale; sentence attribution
+  shows the report writer attends almost entirely to text, not the image.
 
-Known open items: Stage 3 residual collapse (61% modal output with beam search); zero-shot head
-at 0.734 is data-scale-limited (13 points behind RadZero); some test classes have
-single-digit positives after the label fix.
-Full list: [docs/status_report.md](docs/status_report.md) §11.
+Known open items: Stage 3 residual collapse (61% modal output with beam search) and its
+near-zero visual attention; zero-shot head at 0.734 is data-scale-limited (13 points behind
+RadZero); some test classes have single-digit positives after the label fix.
+Full list: [docs/status_report.md](docs/status_report.md) §11; remaining work in
+[docs/project_status_report.md](docs/project_status_report.md) §10.

@@ -66,7 +66,7 @@
     <div class="badge">Compared Against 2 Published AI Models</div>
     <div class="badge">Rebuilt &amp; Re-tested Honestly</div>
   </div>
-  <div class="meta">Prepared 2026-09-20 (updated after the overnight ensemble / decoding / zero-shot runs) &nbsp;·&nbsp; Kartik Singh Rana</div>
+  <div class="meta">Prepared 2026-09-21 (updated after the explainability evaluation) &nbsp;·&nbsp; Kartik Singh Rana</div>
 </div>
 
 <section>
@@ -175,12 +175,38 @@ Both outside systems were <b>actually run</b> on this project's test images — 
 </section>
 
 <section>
-<h2><span class="num">5.</span>Key Takeaways</h2>
+<h2><span class="num">5.</span>Can It Show <i>Where</i> It Looked? — Explainability, Measured</h2>
+<p class="lead">A model that says "pleural effusion, 80%" is more useful — and more trustworthy — if it can also point at the part of the X-ray that made it say so. The project produces such heatmaps in several ways, and until now they had only been eyeballed. They have now been <b>scored against 984 boxes that radiologists drew around real findings</b> on 880 X-rays from a different hospital (the public NIH ChestX-ray14 collection). The test is simple: does the heatmap's hottest point fall inside the radiologist's box?</p>
+
+<div class="bar-wrap">
+  <div class="bar-row"><div class="bar-label">Classifier's own attention (4 models averaged)</div><div class="bar-track"><div class="bar-fill green" style="width:41.2%"></div></div><div class="bar-value">41%</div></div>
+  <div class="bar-row"><div class="bar-label">Classifier's own attention (single model)</div><div class="bar-track"><div class="bar-fill green" style="width:33.7%"></div></div><div class="bar-value">34%</div></div>
+  <div class="bar-row"><div class="bar-label">Always point at the centre of the image</div><div class="bar-track"><div class="bar-fill grey" style="width:21.5%"></div></div><div class="bar-value">22%</div></div>
+  <div class="bar-row"><div class="bar-label">Grad-CAM (a standard heatmap technique)</div><div class="bar-track"><div class="bar-fill" style="width:19.0%"></div></div><div class="bar-value">19%</div></div>
+  <div class="bar-row"><div class="bar-label">Text-matching heatmap (zero-shot model)</div><div class="bar-track"><div class="bar-fill" style="width:11.3%"></div></div><div class="bar-value">11%</div></div>
+  <div class="bar-row"><div class="bar-label">A random point</div><div class="bar-track"><div class="bar-fill grey" style="width:7.5%"></div></div><div class="bar-value">7.5%</div></div>
+</div>
+<p class="footnote">Share of 984 radiologist boxes whose finding the heatmap's hottest pixel lands inside. "Centre" scores 22% only because enlarged-heart boxes cover the middle of every image (97% for that finding alone); leaving that finding out, centre drops to 8% and the classifier's attention to 29%.</p>
+
+<div class="callout good">
+<b>The classifier's heatmaps point at real findings.</b> For fluid around the lung, collapsed lung tissue, lung opacities and pneumonia the hottest point is inside the radiologist's box 33–62% of the time — five to ten times more often than chance. Averaging four models helps here too (34% → 41%). This is the first validated explainability result in the project.
+</div>
+
+<div class="callout warn">
+<b>Where the model is weak, the heatmaps are meaningless.</b> Pneumothorax (collapsed lung) heatmaps are no better than chance — the same condition the classifier itself scores worst on, because it had almost no examples. Two textbook techniques the proposal called for were built and turned out <i>worse</i> than the model's own attention: Grad-CAM (19%) and a generic "what is salient" map (6%, i.e. chance). One planned research question — whether a finer-grained training signal in Stage 1 makes heatmaps more accurate — got a clear answer: <b>no measurable effect at this data size</b> (5% with it, 4% without, both below random).
+</div>
+
+<p><b>And the report writer?</b> A separate check traced, for every sentence the report writer produces, how much of its "attention" went to the image versus to the words it had already written. The answer: about <b>1%</b>. Even sentences that assert a finding give the image only ~3% of their attention, and every sentence in a report re-uses the same glance at the image (the maps for different sentences agree at 0.91 on a 0–1 scale). Where the writer does name a finding that a radiologist boxed, that glance is on the box 55% of the time (centre baseline 32%) — so the image information is there; the writer just barely uses it. That is a measured reason for why the report writer stays weak — and it points to the fix: give it the classifier's findings as text, which is the channel it actually uses.</p>
+</section>
+
+<section>
+<h2><span class="num">6.</span>Key Takeaways</h2>
 <ul>
 <li><b>The full 3-stage pipeline is built, trained on real data, and runs end-to-end</b> — nothing here is simulated or estimated.</li>
 <li><b>The first headline number (87%) was misleading</b> — measured with the answer key; the honest image-only score was 51%. Catching this by testing the hard way is one of the project's most important outcomes.</li>
 <li><b>Root causes were found and fixed</b>: a label-reading bug that mislabelled thousands of normal X-rays, a training setup that leaked the answer, side-view images diluting the data, a non-specialised image encoder — and, for report writing, a "safe answer" collapse.</li>
 <li><b>After the rebuild and the overnight follow-ups:</b> disease-spotting at <b>84% ± 1.5 per model, 87% averaged over four — equal to RadZero</b>; report-writing clinical-efficacy <b>0.176, ahead of CheXOne's 0.149</b>; both on identical test images with identical corrected labels. An earlier single-run figure of 86% was the best of four seeds and should not be quoted alone.</li>
+<li><b>Explainability is now measured, not assumed:</b> the classifier's heatmaps land inside the radiologist's box on <b>41%</b> of 984 real boxes (random: 7.5%); the report writer, by contrast, barely looks at the image at all.</li>
 <li><b>Open problems, stated plainly:</b> the report writer still gives the same "normal" paragraph for ~6 in 10 front-view images and invents equipment in ~3%; it misses most specific abnormal findings; zero-shot matching sits at 73% vs 87% for RadZero (a data-scale gap); and after the label fix some conditions have very few true test cases (one pneumothorax, five consolidations), so their individual scores are not meaningful.</li>
 </ul>
 
@@ -193,10 +219,11 @@ Both outside systems were <b>actually run</b> on this project's test images — 
 </section>
 
 <section>
-<h2><span class="num">6.</span>Plain-Language Glossary</h2>
+<h2><span class="num">7.</span>Plain-Language Glossary</h2>
 <dl class="glossary">
 <dt>AUROC</dt><dd>A 0–100% score for how well a model tells "disease present" apart from "disease absent." 50% = coin-flip guessing; 100% = perfect.</dd>
 <dt>Clinical-efficacy score</dt><dd>For written reports: extracts the specific medical claims from the AI's text and checks them against the true findings, rather than judging fluency. 0 to 1; higher is better.</dd>
+<dt>Heatmap / pointing game</dt><dd>A heatmap colours the parts of the image the model relied on. The pointing game scores it: 1 if the hottest pixel is inside the box a radiologist drew around the finding, 0 otherwise.</dd>
 <dt>Hallucination</dt><dd>When a language model states something specific (here: a catheter, a surgical clip) that has no basis in its input. Dangerous in medical text because it reads as confident fact.</dd>
 <dt>Blind / image-only test</dt><dd>Testing the model using <i>only</i> the X-ray image — no extra hints, exactly like a genuinely new patient.</dd>
 <dt>Held-out test set</dt><dd>Data set aside and never shown to the model during training or tuning, used only at the end to get an honest score.</dd>

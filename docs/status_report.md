@@ -1,6 +1,6 @@
 # MedXVLM — Repository Status Report
 
-Generated: 2026-09-18; updated 2026-09-19 (Stage 3 v2) and 2026-09-20 (overnight: seed ensemble, decoding sweep, v2b, zero-shot v3/v3b, demo app). By direct inspection of the working tree at `/home/kartik/DNN Project 2/medxvlm`. Every number below cites the file or command it came from. Nothing in this document was estimated.
+Generated: 2026-09-18; updated 2026-09-19 (Stage 3 v2), 2026-09-20 (overnight: seed ensemble, decoding sweep, v2b, zero-shot v3/v3b, demo app) and 2026-09-21 (explainability evaluation). By direct inspection of the working tree at `/home/kartik/DNN Project 2/medxvlm`. Every number below cites the file or command it came from. Nothing in this document was estimated.
 
 ## Plain-language summary
 
@@ -46,7 +46,7 @@ MedXVLM is a three-stage chest X-ray vision-language pipeline (contrastive align
 ./src/medxvlm, ./src/medxvlm.egg-info
 ```
 
-`src/medxvlm/` modules: `data/{dataset,labeler,toy_dataset}.py`, `engine/{loop_utils,sanity_trainer}.py`, `eval/metrics.py`, `explain/attention_maps.py`, `models/{alignment,baseline_classifier,classifier_head,labels,report_generator,text_encoder,vision_encoder}.py`.
+`src/medxvlm/` modules: `data/{dataset,labeler,toy_dataset}.py`, `engine/{loop_utils,sanity_trainer}.py`, `eval/metrics.py`, `explain/{attention_maps,saliency,sentence_attribution}.py`, `inference.py`, `models/{alignment,baseline_classifier,classifier_head,labels,report_generator,text_encoder,vision_encoder}.py`.
 `scripts/`: `download_dataset.py, prepare_data.py, validate_labeler.py, sanity_check_data.py, sanity_check_models.py, verify_env.py, train_baseline.py, train_align.py, train_classifier.py, train_report.py, run_phase3_training.sh, run_v2_rebuild.sh, eval_phase5_classification.py, eval_phase5_report_generation.py, eval_phase5_score_reports.py, eval_v2_classification.py`.
 
 Outside the repo root, `/home/kartik/DNN Project 2/external_repro/` holds the RadZero and CheXOne clones, two isolated venvs, and their run scripts/outputs (referenced in §9).
@@ -306,12 +306,16 @@ The **superseded** Phase 5 scores on the old labels (`docs/phase5_artifacts/repo
 
 ## 7. Explainability outputs
 
-- **Mechanism implemented:** per-label attention weights from `ClassifierHead` (`ClassifierOutput.attention_weights`, `[B, num_labels, num_patches]`) overlaid as JET heatmaps — `src/medxvlm/explain/attention_maps.py`. Its docstring states this is *"this project's Grad-CAM/'segmentation map' equivalent, not a separate gradient-based CAM."*
-- **Not implemented:** gradient-based Grad-CAM, attention rollout, text-grounded heatmaps, sentence attribution — `grep -rn -i "gradcam\|rollout\|text_grounded" src scripts` returns only comments/docstrings, no code. These remain proposal items (`docs/project_proposal.md` lines 45, 100–101).
-- **Files on disk:** 120 PNGs total (`find runs -path "*attention_maps*" -name "*.png" | wc -l`), 12 per snapshot directory (4 samples × top-3 labels):
-  - `runs/classifier/attention_maps/local_on/epoch_{002,004,006,008}/` and `…/local_off/epoch_{002,004,006,008}/` — 96 PNGs (Phase 3)
-  - `runs/classifier_v2/attention_maps/local_on/epoch_{005,010}/` — 24 PNGs (v2). Example: `runs/classifier_v2/attention_maps/local_on/epoch_010/sample0_Fracture.png`.
-- **Sanity check logged:** yes, qualitative only — `docs/ablation_study.md` §"Qualitative: grounding-map sharpness" spot-compares two samples at epoch 8: *"Pleural Effusion, sample 0: both conditions concentrate attention on the lower/lateral lung fields near the costophrenic angles — the clinically correct region"*; *"Pneumothorax, sample 1 … local-off looks sharper on this sample — the opposite of the hypothesis in docs/project_proposal.md RQ2."* No quantitative grounding metric (pointing game, IoU) has been computed; the v2 snapshots have not been inspected in any doc.
+- **Mechanisms implemented (2026-09-21 — `src/medxvlm/explain/saliency.py`, `sentence_attribution.py`):** per-label attention-pooling weights (the original mechanism, `attention_maps.py`), Grad-CAM on the final patch tokens, attention rollout over the DINOv2 tower, text-grounded patch–prompt similarity from any Stage 1 checkpoint, and per-sentence visual attribution for Stage 3 (teacher-forced pass with attention weights exposed). All exposed in `MedXVLMPipeline.heatmaps()` / `.attribute_report()` and in the app.
+- **Quantitative grounding metric — computed** (`scripts/eval_grounding_chestxray14.py` → `docs/phase5_artifacts/v2/grounding_chestxray14_summary.json`, 984 NIH ChestX-ray14 radiologist boxes on 880 test images, 8 findings; full write-up `docs/explainability_evaluation.md`). Pointing-game hit rate (map argmax inside the box), Wilson 95% CI:
+  - Stage 2 attention pooling, 4-seed ensemble **41.2 % [38.1, 44.3]**; seed 0 33.7 %
+  - baseline image centre 21.5 %; baseline random point 7.5 % (expected)
+  - Stage 2 Grad-CAM ensemble 19.0 %; attention rollout (class-agnostic) 6.4 %
+  - text-grounded: v3b 11.3 %, v2 8.7 %, Phase 3 local-loss on 5.3 % / off 3.8 % (**RQ2: no measurable grounding gain from the local loss**)
+  - per finding (attention ensemble): Cardiomegaly 93.8 % (centre baseline 97.3 % — trivially central boxes), Infiltrate 61.8 %, Effusion 41.8 %, Pneumonia 39.2 %, Atelectasis 33.3 %, Mass 12.9 %, Nodule 7.6 %, Pneumothorax 4.1 % (chance)
+- **Sentence attribution — computed** (`scripts/eval_sentence_attribution.py` → `sentence_attribution_summary.json`): see `docs/explainability_evaluation.md` §3 for the visual-attention shares of generated sentences and the box-matching test on NIH.
+- **Files on disk:** 216 attention-snapshot PNGs under `runs/*/attention_maps/` (96 Phase 3, 120 v2 across four seeds); 16 grounding example overlays in `docs/phase5_artifacts/v2/grounding_examples/`; sentence-attribution examples in `docs/phase5_artifacts/v2/sentence_attribution_examples/`.
+- **Earlier qualitative check** (`docs/ablation_study.md` §"Qualitative: grounding-map sharpness", two samples) is superseded by the quantitative result above.
 
 ---
 
@@ -407,8 +411,8 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
 6. **ASL-vs-BCE ablation never run** — `docs/ablation_study.md` §"Second ablation".
 7. **No METEOR / RadGraph for report generation.** BLEU-4 and ROUGE-L were added on 2026-09-19 (`scripts/eval_v2_score_reports.py`); they slightly favour the collapsed Phase 3 model and are reported but not used to rank systems (`docs/v2_rebuild.md` §3.4 item 4).
 8. **No retrieval or classification metrics on the test split for Phase 3-era Stage 1** beyond the zero-shot rows; retrieval R@k exists on val only.
-9. **Explainability limited to attention-weight overlays**; no Grad-CAM / rollout / text-grounded heatmaps / sentence attribution; no quantitative grounding metric.
-10. ~~`app/` demo UI not started~~ — built 2026-09-20: `app/app.py` + `src/medxvlm/inference.py`, headless check `scripts/sanity_check_app.py` (4/4 pass), serves on `streamlit run`. Not yet walked through in a browser by a person.
+9. ~~Explainability limited to attention-weight overlays~~ — Grad-CAM, rollout, text-grounded heatmaps and sentence attribution implemented and scored on 984 NIH boxes (2026-09-21, `docs/explainability_evaluation.md`). Remaining gap: no in-distribution (Indiana) box annotations exist, so localisation is measured out-of-distribution only; no reader study.
+10. ~~`app/` demo UI not started~~ — built 2026-09-20: `app/app.py` + `src/medxvlm/inference.py`, headless check `scripts/sanity_check_app.py` (5 checks incl. heatmap methods and sentence attribution), serves on `streamlit run`. Not yet walked through in a browser by a person.
 11. **MedXVLM never evaluated on an external dataset** — `docs/cross_dataset_evaluation.md` §1/§7.
 12. **Phase 3 infrastructure incident**: first Stage 3 attempt killed at model load by session teardown; restarted with `setsid` — `docs/training_summary.md` §"What didn't finish".
 13. **`README.md` "Project status" is stale** (says Phase 3; no mention of Phases 4–5, the v2 rebuild, or the superseded number).
@@ -425,9 +429,9 @@ Weights used: `Deepnoid/RadZero` rev `1e6e7d6295a13aa0a4a7e1c1e2bb36b9ef4e02e8`;
 | Stage 1 — contrastive alignment | Done (Phase 3 ×2, v2 ×3, v3, v3b) | yes — zero-shot macro AUROC: v2 0.565, **v3b (finding sentences) 0.734**, RadZero 0.868 (`v2_classification_summary.json`); v2 val R@1 ≈ 0.04–0.06 |
 | Stage 2 — classification | Done (v2 image-only; 4 seeds) | yes — **single seed 0.837 ± 0.015; 4-seed ensemble 0.868 (8 shared) / 0.835 (13)**; NIH ensemble 0.719 (`classifier_seed_ensemble.json`) |
 | Stage 3 — report generation | Done — v2 (2026-09-19) + decoding sweep and v2b ablation (2026-09-20) | yes — **v2 + beam-3: CE macro F1 0.176 (frontal), hallucination 3%**; greedy 0.152 / 10%; v2b (30% sampling) collapsed to 1 output (`report_generation_scores_v2_overnight.json`) | yes — v2 CE macro F1 **0.152** (70 frontal) / 0.119 (150) vs CheXOne 0.149 / 0.107; BLEU-4 9.76, ROUGE-L 0.280 (frontal); 61 distinct / 150; val loss 1.132 (ep 3) (`docs/phase5_artifacts/v2/report_generation_scores_v2.json`) |
-| Explainability | In progress — attention-weight heatmaps only | no quantitative number; 120 PNGs on disk; qualitative spot-check in `docs/ablation_study.md` |
+| Explainability | Done (2026-09-21): attention pooling, Grad-CAM, rollout, text-grounded, sentence attribution — all scored | yes — **pointing game on 984 NIH boxes: attention ensemble 41.2 %** vs random 7.5 % / centre 21.5 %; Grad-CAM 19.0 %; text v3b 11.3 %; local-loss on/off 5.3 / 3.8 % (`grounding_chestxray14_summary.json`) |
 | Ablation | Done (local-loss on/off); ASL-vs-BCE not run | yes — Stage 2 macro AUROC 0.8645 vs 0.8648 (text-fusion protocol); Stage 1 R@1 i2t 0.0134 vs 0.0174 (`docs/ablation_study.md`) |
 | External benchmark (RadZero / CheXOne) | Done for RadZero; CheXOne qualitative + one generation run only | yes — RadZero 0.852 (own OpenI subsample), 0.868 (MedXVLM frontal test, corrected labels); CheXOne CE F1 0.105 on 150 MedXVLM images; CheXOne benchmarks: paper-reported only |
 | Cross-dataset | Done in both directions (flipped 2026-09-06; MedXVLM→NIH 2026-09-20) | yes — RadZero 0.868 vs MedXVLM 0.855 on identical images; **MedXVLM on NIH ChestX-ray14 test split: 0.714** macro AUROC, 8 classes (`chestxray14_external_eval_summary.json`) |
 | Demo app | Done (2026-09-20), headless-tested | n/a |
-| Version control | Not started (0 commits) | — |
+| Version control | Done — GitHub `KartikSinghRana/medxvlm` (private), 9+ commits | — |
