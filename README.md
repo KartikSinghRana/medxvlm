@@ -131,10 +131,19 @@ plain CSV under `runs/` via `medxvlm.engine.loop_utils.EpochLogger`.
 
 ## Demo app
 
-The Week-14 deliverable from the proposal: upload a frontal chest X-ray (or
-pick a held-out test image) → 14-class probabilities → per-label attention
-overlays → optionally a generated findings paragraph, with the reference
-report and true labels alongside when the image comes from the test split.
+The Week-14 deliverable from the proposal, as a two-page Streamlit app with a light and a dark theme:
+
+- **Analyze an X-ray** — pick a held-out test image (filter to abnormal studies, or hit *Random*) or upload a
+  frontal X-ray → the 4-model ensemble's 14 finding probabilities with per-class thresholds and the radiologist's
+  labels alongside → heatmaps in three methods (attention pooling, Grad-CAM, text-grounded), each labelled with its
+  measured pointing-game accuracy on 984 radiologist boxes (41% / 19% / 11%; random point 7.5%) → a drafted findings
+  report next to the radiologist's, with optional per-sentence attention maps.
+- **Model card** — every headline number, read live from `docs/phase5_artifacts/v2/`, with comparison charts
+  against RadZero, CheXOne and the baselines, plus the known limitations.
+
+![Analyze page, dark theme](docs/assets/app_analyze_dark.jpg)
+
+![Model card, light theme](docs/assets/app_model_card_light.jpg)
 
 ```bash
 conda activate ml   # streamlit is not installed in the base env
@@ -144,19 +153,14 @@ PYTHONPATH=src streamlit run app/app.py
 - **Trained weights are not in this repository** (`checkpoints/` is gitignored, ~12 GB). A fresh clone has the code and every
   reported number, but the app and eval scripts need the checkpoints: either retrain with the commands in *Training*
   (recipes in `configs/*_v2.yaml`, `align_v3b_findings.yaml`) or copy `checkpoints/` from the original machine.
-- The 4-seed ensemble classifier loads on start (~1.4 GB VRAM); reports use beam-3 decoding by default. Report generation is **off by
-  default** (toggle in the sidebar; loads the 1.5B decoder, ~7 GB VRAM). Two report models: **v2** (image-only prompt, default) and
-  **v2c** (findings-conditioned: the ensemble's flagged findings are written into the prompt; 0% hallucination; the app shows them).
-- Every screen states the measured numbers and the known failure modes
-  (thin-support classes are greyed out; device mentions in generated text are
-  flagged, since the generator hallucinates them in ~3% of frontal cases with beam decoding, ~10% greedy).
-- Heatmaps come in three flavours — the classifier's attention pooling,
-  Grad-CAM, and Stage 1 text-grounded similarity — each labelled with its
-  measured pointing-game accuracy on 984 radiologist boxes (41% / 19% / 11%;
-  random 7.5%). Generated reports get per-sentence attribution maps.
-- All inference logic is in `src/medxvlm/inference.py` (`MedXVLMPipeline`);
-  the app is a thin view over it.
-- Headless functional check (no browser needed):
+- The classifier ensemble loads on start (~1.4 GB VRAM). The report writer loads on the first *Generate report*
+  (~7 GB VRAM; *Options → Unload report model* frees it). Two report models: **v2** writes from the image (beam search
+  by default) and **v2c** is told the classifier's flagged findings first (greedy by default; 0% invented devices; the
+  app shows which findings it was given).
+- Layout: `app/app.py` (entry point, navigation), `app/app_pages/{analyze,model_card}.py`, `app/common.py` (cached
+  loaders), theme in `app/.streamlit/config.toml`. All inference logic is in `src/medxvlm/inference.py`
+  (`MedXVLMPipeline`); the app is a thin view over it.
+- Headless functional check (no browser needed; 7 user paths):
   `PYTHONPATH=src python scripts/sanity_check_app.py [--no-generator]`.
 
 ## Documentation

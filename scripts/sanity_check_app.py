@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Headless functional check of the Streamlit demo (app/app.py).
+"""Headless functional check of the Streamlit demo (app/app.py + app/app_pages/).
 
-Drives the real app script through `streamlit.testing.v1.AppTest` -- no
-browser, no server -- and asserts that each user path renders without an
-exception and produces the elements a user would see:
+Drives the real app through `streamlit.testing.v1.AppTest` -- no browser, no
+server -- and asserts that each user path renders without an exception and
+produces the elements a user would see:
 
-  1. cold start: title + disclaimer render, no model errors
-  2. switch to the upload source -> uploader shown, clean stop, no override
-  3. pick a held-out test image -> probabilities chart, ground-truth table,
-     attention heatmaps appear
-  4. switch the heatmap method to Grad-CAM and text-grounded -> overlays
-     still render (text-grounded lazily loads the Stage 1 checkpoint)
-  5. enable report generation -> generator loads, "Generate findings" runs,
-     report text and per-sentence attribution panels appear (skipped with
-     --no-generator to keep it light)
+  1. cold start: page title, disclaimer badge, input source control
+  2. upload source -> uploader shown, clean empty state, no test-image override
+  3. held-out test image -> findings badges + table, heatmaps
+  4. heatmap methods: attention, Grad-CAM and text-grounded overlays all render
+  5. report (v2): generator loads on "Generate report", text + radiologist
+     reference render, "Explain each sentence" renders attribution panels
+  6. report (v2c): switching model flips decoding to greedy, the report shows
+     the findings given to the writer
+  7. model card page renders its tabs, metrics and charts
 
-Follows the repo's sanity_check_*.py convention: prints PASS/FAIL per check,
-exit code 1 on any failure.
+Steps 5-6 load the ~7 GB decoder; skip them with --no-generator.
+Prints PASS/FAIL per check, exit code 1 on any failure.
 
 Usage:
     PYTHONPATH=src python scripts/sanity_check_app.py [--no-generator]
@@ -40,88 +40,99 @@ def _fail_on_exception(at: AppTest, step: str) -> None:
         raise AssertionError(f"{step}: app raised {at.exception[0].value!r}\n{at.exception[0].stack_trace}")
 
 
+def _markdown(at: AppTest) -> str:
+    return " ".join(m.value for m in at.markdown)
+
+
+def _captions(at: AppTest) -> str:
+    return " ".join(c.value for c in at.caption)
+
+
 def check_cold_start(at: AppTest) -> None:
     _fail_on_exception(at, "cold start")
-    assert any("MedXVLM" in t.value for t in at.title), "title missing"
-    assert any("not a medical device" in e.value for e in at.error), "disclaimer banner missing"
-    assert at.toggle(key=None) is not None or at.toggle, "report toggle missing"
-    print("[PASS] cold start renders title, disclaimer and sidebar")
+    assert any("Chest X-ray analysis" in t.value for t in at.title), "page title missing"
+    assert "not a medical device" in _markdown(at), "disclaimer badge missing"
+    assert at.segmented_control(key="source") is not None, "input source control missing"
+    print("[PASS] cold start: title, disclaimer badge and input source render")
 
 
-def check_upload_path_renders(at: AppTest) -> None:
-    """Switch to the upload source: the uploader must appear and the app must stop cleanly, not crash."""
-    at.radio[0].set_value("Upload an X-ray").run(timeout=60)
+def check_upload_path(at: AppTest) -> None:
+    at.segmented_control(key="source").set_value("upload").run(timeout=60)
     _fail_on_exception(at, "upload source selected")
-    assert any("Upload an image" in i.value for i in at.info), "upload prompt missing"
+    assert "Upload a frontal chest X-ray" in _captions(at), "upload empty state missing"
     assert not at.selectbox, "test-image selectbox should not render on the upload path"
-    at.radio[0].set_value("Held-out test image").run(timeout=120)
+    at.segmented_control(key="source").set_value("test").run(timeout=120)
     _fail_on_exception(at, "switch back to test images")
-    print("[PASS] upload path: uploader renders, no test-image override, clean stop")
+    print("[PASS] upload path: uploader + empty state, no test-image override")
 
 
 def check_test_image_path(at: AppTest) -> None:
-    boxes = at.selectbox
-    assert boxes, "test-image selectbox missing (is data/processed/manifest.csv present?)"
-    boxes[0].select_index(0).run(timeout=120)
+    assert at.selectbox, "test-image selectbox missing (is data/processed/manifest.csv present?)"
+    at.selectbox(key="test_image").select_index(0).run(timeout=120)
     _fail_on_exception(at, "test image selected")
-    subheaders = [s.value for s in at.subheader]
-    assert any("probabilities" in s for s in subheaders), f"probabilities section missing: {subheaders}"
-    assert any("looked" in s for s in subheaders), "explainability section missing"
-    assert at.dataframe, "ground-truth comparison table missing"
-    captions = " ".join(c.value for c in at.caption)
-    assert "Grey bars" in captions, "thin-support caption missing"
-    print(f"[PASS] test-image path: chart, ground-truth table and {len(at.multiselect[0].value)} default heatmap labels rendered")
+    subheaders = " ".join(s.value for s in at.subheader)
+    for section in ("Findings", "Where the model looked", "Findings report"):
+        assert section in subheaders, f"section {section!r} missing: {subheaders}"
+    assert at.dataframe, "findings table missing"
+    assert "**Radiologist**" in _markdown(at), "ground-truth badges missing"
+    labels = at.pills[0].value
+    print(f"[PASS] test-image path: findings badges + table, {len(labels)} default heatmap findings")
 
 
 def check_heatmap_methods(at: AppTest) -> None:
-    method_radio = [r for r in at.radio if r.label == "Heatmap method"]
-    assert method_radio, "heatmap-method radio missing"
-    n_before = len(at.get("imgs"))
     for method in ("gradcam", "text", "attention"):
-        method_radio[0].set_value(method).run(timeout=180)
+        at.segmented_control(key="heatmap_method").set_value(method).run(timeout=180)
         _fail_on_exception(at, f"heatmap method {method}")
-        assert len(at.get("imgs")) >= n_before, f"{method}: fewer images rendered than before ({len(at.get('imgs'))} < {n_before})"
-        assert not [w for w in at.warning if "Checkpoint for this method is missing" in w.value], f"{method}: checkpoint missing"
+        assert len(at.get("image")) >= 3, f"{method}: heatmaps missing (x-ray + >=2 overlays expected)"
+        assert not [w for w in at.warning if "checkpoint for this method is missing" in w.value], f"{method}: checkpoint missing"
     print("[PASS] heatmap methods: attention, Grad-CAM and text-grounded overlays all render")
 
 
-def check_report_generation(at: AppTest) -> None:
-    at.toggle[0].set_value(True).run(timeout=180)
-    _fail_on_exception(at, "enable report generation")
-    buttons = [b for b in at.button if "Generate" in b.label]
-    assert buttons, "Generate button missing after enabling generator"
-    buttons[0].click().run(timeout=300)
-    _fail_on_exception(at, "generate findings")
-    body = " ".join(m.value for m in at.markdown) + " ".join(getattr(w, "value", "") for w in at.get("text"))
-    assert "Model" in body or any("Reference" in m.value for m in at.markdown), "generated-report section missing"
-    expanders = [e for e in at.expander if "Sentence attribution" in e.label]
-    assert expanders, "sentence-attribution expander missing"
-    captions = [c.value for c in expanders[0].caption] if hasattr(expanders[0], "caption") else []
-    assert any("attention weights exposed" in c for c in captions), "sentence-attribution explanation missing"
-    print("[PASS] report generation: decoder loaded, findings generated, sentence attribution rendered")
-    # switch to the findings-conditioned v2c generator and generate again
-    model_radio = [r for r in at.radio if r.label == "Report model"]
-    assert model_radio, "report-model radio missing"
-    model_radio[0].set_value("v2c").run(timeout=300)
+def check_report_v2(at: AppTest) -> None:
+    at.button(key="generate").click().run(timeout=300)
+    _fail_on_exception(at, "generate report (v2)")
+    md = _markdown(at)
+    assert "MedXVLM v2**" in md, "generated report header missing"
+    assert "**:material/stethoscope: Radiologist**" in md, "radiologist reference missing"
+    at.toggle(key="explain_sentences").set_value(True).run(timeout=300)
+    _fail_on_exception(at, "explain each sentence")
+    assert "is the share of the sentence's attention" in _captions(at), "attribution explanation missing"
+    print("[PASS] report v2: decoder loaded on demand, report + reference + sentence attribution rendered")
+
+
+def check_report_v2c(at: AppTest) -> None:
+    at.segmented_control(key="report_model").set_value("v2c").run(timeout=120)
     _fail_on_exception(at, "switch to v2c")
-    buttons = [b for b in at.button if "Generate" in b.label]
-    buttons[0].click().run(timeout=300)
-    _fail_on_exception(at, "generate with v2c")
-    captions = " ".join(c.value for c in at.caption)
-    assert "put into the prompt" in captions, "v2c flagged-findings caption missing"
-    print("[PASS] v2c: findings-conditioned generator loaded, report + prompt findings rendered")
+    assert at.segmented_control(key="decoding").value == "greedy", "decoding did not switch to greedy for v2c"
+    at.button(key="generate").click().run(timeout=300)
+    _fail_on_exception(at, "generate report (v2c)")
+    assert "Findings given to the writer" in _markdown(at), "v2c prompt findings missing"
+    print("[PASS] report v2c: greedy decoding auto-selected, report + prompt findings rendered")
+
+
+def check_model_card(at: AppTest) -> None:
+    at.switch_page("app_pages/model_card.py").run(timeout=120)
+    _fail_on_exception(at, "model card page")
+    assert any("Model card" in t.value for t in at.title), "model card title missing"
+    assert len(at.tabs) == 4, f"expected 4 tabs, got {len(at.tabs)}"
+    assert len(at.metric) >= 10, f"expected >=10 metrics, got {len(at.metric)}"
+    assert len(at.get("vega_lite_chart")) >= 4, "charts missing"
+    print(f"[PASS] model card: {len(at.tabs)} tabs, {len(at.metric)} metrics, {len(at.get('vega_lite_chart'))} charts")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--no-generator", action="store_true", help="Skip the ~7 GB decoder check.")
+    ap.add_argument("--no-generator", action="store_true", help="Skip the ~7 GB decoder checks.")
     args = ap.parse_args()
 
     at = AppTest.from_file(str(APP), default_timeout=180)
     at.run()
+    checks = [check_cold_start, check_upload_path, check_test_image_path, check_heatmap_methods]
+    if not args.no_generator:
+        checks += [check_report_v2, check_report_v2c]
+    checks.append(check_model_card)
     failures = 0
-    checks = (check_cold_start, check_upload_path_renders, check_test_image_path, check_heatmap_methods)
-    for check in checks + (() if args.no_generator else (check_report_generation,)):
+    for check in checks:
         try:
             check(at)
         except AssertionError as exc:
