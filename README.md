@@ -131,19 +131,19 @@ plain CSV under `runs/` via `medxvlm.engine.loop_utils.EpochLogger`.
 
 ## Demo app
 
-The Week-14 deliverable from the proposal, as a two-page Streamlit app with a light and a dark theme:
+The Week-14 deliverable from the proposal, as a two-page Streamlit app (light, minimal theme):
 
 - **Analyze an X-ray** — pick a held-out test image (filter to abnormal studies, or hit *Random*) or upload a
   frontal X-ray → the 4-model ensemble's 14 finding probabilities with per-class thresholds and the radiologist's
-  labels alongside → heatmaps in three methods (attention pooling, Grad-CAM, text-grounded), each labelled with its
+  labels alongside → heatmaps (hot regions tinted, the rest of the X-ray left untouched) in three methods (attention pooling, Grad-CAM, text-grounded), each labelled with its
   measured pointing-game accuracy on 984 radiologist boxes (41% / 19% / 11%; random point 7.5%) → a drafted findings
   report next to the radiologist's, with optional per-sentence attention maps.
 - **Model card** — every headline number, read live from `docs/phase5_artifacts/v2/`, with comparison charts
   against RadZero, CheXOne and the baselines, plus the known limitations.
 
-![Analyze page, dark theme](docs/assets/app_analyze_dark.jpg)
+![Analyze page](docs/assets/app_analyze.jpg)
 
-![Model card, light theme](docs/assets/app_model_card_light.jpg)
+![Model card](docs/assets/app_model_card.jpg)
 
 ```bash
 conda activate ml   # streamlit is not installed in the base env

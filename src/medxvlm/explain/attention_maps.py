@@ -40,13 +40,35 @@ def _overlay_heatmap(image_rgb: np.ndarray, attention: torch.Tensor, alpha: floa
     return overlay.astype(np.uint8)
 
 
-def overlay_attention(image: torch.Tensor, attention: torch.Tensor, alpha: float = 0.45) -> np.ndarray:
+def _focus_overlay(image_rgb: np.ndarray, attention: torch.Tensor, max_alpha: float = 0.85,
+                   gamma: float = 1.3, floor: float = 0.12) -> np.ndarray:
+    """Tint only where attention is high: per-pixel opacity grows with the (min-max normalised) weight.
+
+    # why: the classic overlay washes the whole X-ray in the colormap's low end (JET blue),
+    # which hides the anatomy and makes every map look alike; here low-attention regions stay
+    # untouched greyscale and only the hot spots are coloured (inferno), so the image stays readable.
+    """
+    grid = int(attention.shape[-1] ** 0.5)
+    heat = attention.detach().cpu().float().reshape(grid, grid).numpy()
+    heat = (heat - heat.min()) / (heat.max() - heat.min() + 1e-8)
+    height, width = image_rgb.shape[:2]
+    heat = np.clip(cv2.resize(heat.astype(np.float32), (width, height), interpolation=cv2.INTER_CUBIC), 0, 1)
+    weight = (np.clip((heat - floor) / (1 - floor), 0, 1) ** gamma * max_alpha)[..., None]
+    color = cv2.cvtColor(cv2.applyColorMap((heat * 255).astype(np.uint8), cv2.COLORMAP_INFERNO), cv2.COLOR_BGR2RGB)
+    return (image_rgb.astype(np.float32) * (1 - weight) + color.astype(np.float32) * weight).astype(np.uint8)
+
+
+def overlay_attention(image: torch.Tensor, attention: torch.Tensor, alpha: float = 0.45, style: str = "classic") -> np.ndarray:
     """One in-memory heatmap overlay: `[3, H, W]` normalised image + `[num_patches]` weights -> RGB uint8.
 
     The in-memory counterpart of `save_grounding_snapshots` for interactive
-    use (the demo app); shares the exact same de-normalisation and colour
-    mapping so what the app shows is what the training snapshots show.
+    use. `style="classic"` is the exact JET overlay the training snapshots and
+    docs use; `style="focus"` tints only high-attention regions (the demo app).
     """
+    if style == "focus":
+        return _focus_overlay(_denormalize(image), attention)
+    if style != "classic":
+        raise ValueError(f"style must be 'classic' or 'focus', got {style!r}")
     return _overlay_heatmap(_denormalize(image), attention, alpha=alpha)
 
 

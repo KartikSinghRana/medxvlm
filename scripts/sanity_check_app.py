@@ -5,12 +5,12 @@ Drives the real app through `streamlit.testing.v1.AppTest` -- no browser, no
 server -- and asserts that each user path renders without an exception and
 produces the elements a user would see:
 
-  1. cold start: page title, disclaimer badge, input source control
+  1. cold start: page title, disclaimer line, input source control
   2. upload source -> uploader shown, clean empty state, no test-image override
   3. held-out test image -> findings badges + table, heatmaps
   4. heatmap methods: attention, Grad-CAM and text-grounded overlays all render
   5. report (v2): generator loads on "Generate report", text + radiologist
-     reference render, "Explain each sentence" renders attribution panels
+     reference render, "Show sentence attention" renders attribution panels
   6. report (v2c): switching model flips decoding to greedy, the report shows
      the findings given to the writer
   7. model card page renders its tabs, metrics and charts
@@ -51,9 +51,9 @@ def _captions(at: AppTest) -> str:
 def check_cold_start(at: AppTest) -> None:
     _fail_on_exception(at, "cold start")
     assert any("Chest X-ray analysis" in t.value for t in at.title), "page title missing"
-    assert "not a medical device" in _markdown(at), "disclaimer badge missing"
+    assert "not a medical device" in _captions(at), "disclaimer line missing"
     assert at.segmented_control(key="source") is not None, "input source control missing"
-    print("[PASS] cold start: title, disclaimer badge and input source render")
+    print("[PASS] cold start: title, disclaimer line and input source render")
 
 
 def check_upload_path(at: AppTest) -> None:
@@ -74,9 +74,9 @@ def check_test_image_path(at: AppTest) -> None:
     for section in ("Findings", "Where the model looked", "Findings report"):
         assert section in subheaders, f"section {section!r} missing: {subheaders}"
     assert at.dataframe, "findings table missing"
-    assert "**Radiologist**" in _markdown(at), "ground-truth badges missing"
-    labels = at.pills[0].value
-    print(f"[PASS] test-image path: findings badges + table, {len(labels)} default heatmap findings")
+    assert "Model flags" in _captions(at) and "Radiologist" in _captions(at), "findings summary missing"
+    labels = at.multiselect[0].value
+    print(f"[PASS] test-image path: findings summary + table, {len(labels)} default heatmap findings")
 
 
 def check_heatmap_methods(at: AppTest) -> None:
@@ -91,12 +91,12 @@ def check_heatmap_methods(at: AppTest) -> None:
 def check_report_v2(at: AppTest) -> None:
     at.button(key="generate").click().run(timeout=300)
     _fail_on_exception(at, "generate report (v2)")
-    md = _markdown(at)
-    assert "MedXVLM v2**" in md, "generated report header missing"
-    assert "**:material/stethoscope: Radiologist**" in md, "radiologist reference missing"
+    captions = _captions(at)
+    assert "MedXVLM v2, beam search" in captions, "generated report header missing"
+    assert any(c.value == "Radiologist" for c in at.caption), "radiologist reference missing"
     at.toggle(key="explain_sentences").set_value(True).run(timeout=300)
-    _fail_on_exception(at, "explain each sentence")
-    assert "is the share of the sentence's attention" in _captions(at), "attribution explanation missing"
+    _fail_on_exception(at, "show sentence attention")
+    assert "Each map shows where one sentence looked" in _captions(at), "attribution explanation missing"
     print("[PASS] report v2: decoder loaded on demand, report + reference + sentence attribution rendered")
 
 
@@ -106,7 +106,7 @@ def check_report_v2c(at: AppTest) -> None:
     assert at.segmented_control(key="decoding").value == "greedy", "decoding did not switch to greedy for v2c"
     at.button(key="generate").click().run(timeout=300)
     _fail_on_exception(at, "generate report (v2c)")
-    assert "Findings given to the writer" in _markdown(at), "v2c prompt findings missing"
+    assert "Findings given to the writer" in _captions(at), "v2c prompt findings missing"
     print("[PASS] report v2c: greedy decoding auto-selected, report + prompt findings rendered")
 
 

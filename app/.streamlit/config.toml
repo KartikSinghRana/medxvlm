@@ -1,7 +1,6 @@
 # MedXVLM demo theme — script-level config (applies to `streamlit run app/app.py`
-# from any working directory). Teal accent on slate neutrals; light and dark
-# variants so the viewer's system setting (or the ⋮ menu) picks one. X-rays read
-# best on the dark variant, which is what radiology reading rooms use.
+# from any working directory). Light only: neutral zinc greys, near-black for
+# interactive states, and a single deep-teal accent reserved for data.
 
 [server]
 enableStaticServing = true      # serves app/static/ (the logo)
@@ -10,66 +9,43 @@ enableStaticServing = true      # serves app/static/ (the logo)
 toolbarMode = "minimal"
 
 [theme]
-font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap"
-codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
-baseFontSize = 15
-baseFontWeight = 400
-codeFontSize = "0.85rem"
-headingFontSizes = ["30px", "22px", "18px", "16px", "14px", "12px"]
-headingFontWeights = [700, 600, 600, 600, 500, 500]
-baseRadius = "10px"
-buttonRadius = "8px"
-linkUnderline = false
+base = "light"
+primaryColor = "#18181b"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f4f5"
+textColor = "#18181b"
+linkColor = "#0f766e"
+borderColor = "#e4e4e7"
+codeBackgroundColor = "#f4f4f5"
+codeTextColor = "#3f3f46"
 showWidgetBorder = true
 showSidebarBorder = true
+baseRadius = "8px"
+buttonRadius = "8px"
+linkUnderline = false
 
-[theme.light]
-primaryColor = "#0f766e"               # teal-700: 5.5:1 against white button text
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f1f5f9"
-textColor = "#0f172a"
-linkColor = "#0f766e"
-borderColor = "#e2e8f0"
-codeBackgroundColor = "#f1f5f9"
-codeTextColor = "#0f172a"
-dataframeBorderColor = "#e2e8f0"
-dataframeHeaderBackgroundColor = "#f8fafc"
+font = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap"
+headingFont = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700&display=swap"
+codeFont = "'Geist Mono':https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap"
+baseFontSize = 14
+baseFontWeight = 400
+codeFontSize = "0.8rem"
+headingFontSizes = ["28px", "18px", "15px", "14px", "13px", "12px"]
+headingFontWeights = [600, 600, 600, 600, 500, 500]
+
+dataframeBorderColor = "#e4e4e7"
+dataframeHeaderBackgroundColor = "#fafafa"
+
 greenColor = "#15803d"
-redColor = "#dc2626"
-orangeColor = "#ea580c"
-yellowColor = "#ca8a04"
-blueColor = "#2563eb"
-violetColor = "#7c3aed"
-grayColor = "#64748b"
-chartCategoricalColors = ["#0f766e", "#2563eb", "#7c3aed", "#ea580c", "#db2777", "#ca8a04", "#64748b"]
+redColor = "#b91c1c"
+orangeColor = "#c2410c"
+yellowColor = "#a16207"
+blueColor = "#1d4ed8"
+violetColor = "#6d28d9"
+grayColor = "#71717a"
+chartCategoricalColors = ["#0f766e", "#18181b", "#a1a1aa", "#0e7490", "#52525b", "#d4d4d8"]
 
-[theme.light.sidebar]
-backgroundColor = "#f8fafc"
-secondaryBackgroundColor = "#eef2f6"
-borderColor = "#e2e8f0"
-
-[theme.dark]
-primaryColor = "#0d9488"               # teal-600: readable white button text, bright enough on slate
-backgroundColor = "#0b1120"
-secondaryBackgroundColor = "#141c2f"
-textColor = "#e2e8f0"
-linkColor = "#2dd4bf"
-borderColor = "#23304a"
-codeBackgroundColor = "#141c2f"
-codeTextColor = "#cbd5e1"
-dataframeBorderColor = "#23304a"
-dataframeHeaderBackgroundColor = "#141c2f"
-greenColor = "#34d399"
-redColor = "#f87171"
-orangeColor = "#fb923c"
-yellowColor = "#fbbf24"
-blueColor = "#60a5fa"
-violetColor = "#a78bfa"
-grayColor = "#94a3b8"
-chartCategoricalColors = ["#2dd4bf", "#60a5fa", "#a78bfa", "#fb923c", "#f472b6", "#fbbf24", "#94a3b8"]
-
-[theme.dark.sidebar]
-backgroundColor = "#070b16"
-secondaryBackgroundColor = "#111827"
-borderColor = "#1b2438"
+[theme.sidebar]
+backgroundColor = "#fafafa"
+secondaryBackgroundColor = "#f4f4f5"
+borderColor = "#e4e4e7"

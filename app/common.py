@@ -29,6 +29,9 @@ IMAGES_DIR = REPO_ROOT / "data" / "raw" / "images" / "images_normalized"
 ARTIFACTS = REPO_ROOT / "docs" / "phase5_artifacts" / "v2"
 CHEXONE_GENERATIONS = REPO_ROOT.parent / "external_repro" / "chexone_testsplit_generations.csv"
 
+# The one accent colour (data only: probability bars, "ours" in charts); everything else is neutral zinc.
+ACCENT = "#0f766e"
+
 # Same device/surgery regex as docs/v2_rebuild.md §3.4 (mention in the generation, absent from the reference).
 DEVICE_RE = re.compile(r"catheter|picc|\btube|\bline\b|clip|wire|pacemaker|lobectomy|sternotomy|\bport\b", re.I)
 
@@ -55,7 +58,7 @@ def classify(key: str, _pipeline: MedXVLMPipeline, _image) -> dict[str, float]:
 
 @st.cache_data(max_entries=64, show_spinner=False)
 def heatmaps(key: str, method: str, labels: tuple[str, ...], _pipeline: MedXVLMPipeline, _image) -> dict:
-    return _pipeline.heatmaps(_image, list(labels), method=method)
+    return _pipeline.heatmaps(_image, list(labels), method=method, style="focus")
 
 
 # ---------------------------------------------------------------- data

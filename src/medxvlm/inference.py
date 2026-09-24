@@ -74,9 +74,9 @@ class ClassificationResult:
     def ranked(self) -> list[tuple[str, float]]:
         return sorted(self.probabilities.items(), key=lambda kv: kv[1], reverse=True)
 
-    def heatmap(self, label: str) -> np.ndarray:
+    def heatmap(self, label: str, style: str = "classic") -> np.ndarray:
         """RGB uint8 overlay of `label`'s attention over the preprocessed image."""
-        return overlay_attention(self.pixel_values, self.attention_weights[CHEXPERT_LABELS.index(label)])
+        return overlay_attention(self.pixel_values, self.attention_weights[CHEXPERT_LABELS.index(label)], style=style)
 
 
 @dataclass
@@ -248,7 +248,7 @@ class MedXVLMPipeline:
             n_models=n,
         )
 
-    def heatmaps(self, image: Image.Image, labels: Sequence[str], method: str = "attention") -> dict[str, np.ndarray]:
+    def heatmaps(self, image: Image.Image, labels: Sequence[str], method: str = "attention", style: str = "classic") -> dict[str, np.ndarray]:
         """Label -> RGB overlay for one of `HEATMAP_METHODS`.
 
         "attention": Stage 2's per-label attention weights, averaged over the ensemble (what `classify()` returns).
@@ -267,7 +267,7 @@ class MedXVLMPipeline:
         else:
             grounder = self.load_text_grounder()
             maps = grounder.map(batch, grounder.embed_prompts([f"There is {l.lower()}." for l in labels]))[0]
-        return {label: overlay_attention(pixel_values, maps[i].cpu()) for i, label in enumerate(labels)}
+        return {label: overlay_attention(pixel_values, maps[i].cpu(), style=style) for i, label in enumerate(labels)}
 
     def flagged_findings(self, probabilities: dict[str, float]) -> list[str]:
         """Classifier findings above their val-selected thresholds, most confident first (the v2c prompt rule)."""
@@ -283,7 +283,7 @@ class MedXVLMPipeline:
         return DEFAULT_REPORT_INSTRUCTION, []
 
     @torch.no_grad()
-    def attribute_report(self, image: Image.Image, text: str, instruction: str | None = None) -> list[SentenceExplanation]:
+    def attribute_report(self, image: Image.Image, text: str, instruction: str | None = None, style: str = "classic") -> list[SentenceExplanation]:
         """Per-sentence visual attention of the generator for an already generated `text` (one extra decoder pass)."""
         if self.report_generator is None:
             self.load_report_generator()
@@ -294,7 +294,7 @@ class MedXVLMPipeline:
         atts: list[SentenceAttribution] = attribute_sentences(
             self.report_generator, pixel_values.unsqueeze(0).to(self.device), instruction, text
         )
-        return [SentenceExplanation(a.sentence, a.visual_share_excl_sink, overlay_attention(pixel_values, a.visual_map)) for a in atts]
+        return [SentenceExplanation(a.sentence, a.visual_share_excl_sink, overlay_attention(pixel_values, a.visual_map, style=style)) for a in atts]
 
     @torch.no_grad()
     def generate_report(self, image: Image.Image, max_new_tokens: int = 128, decoding: dict | None = None) -> ReportResult:
