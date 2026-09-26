@@ -32,6 +32,7 @@ Exact commands: `scripts/run_v2_rebuild.sh` (serialized; one GPU job at a time).
 | Stage 2 v2 seeds 1, 2, 3 (2026-09-20) | `classifier_v2.yaml --seed N` | 0.828 / 0.850 / 0.810 | 8 / 9 / 8 | 29.7 / 34.6 / 39.2 min |
 | Stage 1 v3 sentence-level multi-positive (2026-09-20) | `align_v3_sentence.yaml` | val loss 2.94 | 10 | 26.1 min |
 | Stage 1 v3b finding-sentences only (2026-09-20) | `align_v3b_findings.yaml` | val loss 0.99 (different loss scale) | 5 (early-stopped at 8) | 17.1 min |
+| Stage 2 RQ1 encoders: BiomedCLIP / OpenAI CLIP / ImageNet ViT, seed 0 (2026-09-26) | `classifier_v2.yaml --vision-backbone …` | 0.794 / 0.802 / 0.764 | 15 / 18 / 7 | 45.0 / 50.8 / 27.5 min |
 | **Stage 3 v2c**, as v2 + findings-conditioned prompt, selection by generation CE F1 (2026-09-21) | `report_gen_v2c.yaml` | val gen CE F1 **0.322** (val loss 1.152); full-val re-check 0.270 | 1 (early-stopped at 3) | 70.4 min (ep 1, batch 4) + 21.3 min (ep 2–3, batch 2×8) — §3.7 |
 
 Stage 2 v2 overfits quickly (train macro AUROC 0.98 by epoch 14 while val slid from 0.83 to 0.79) — early stopping did its job, but ~3k training images is the regime we are in.
@@ -262,10 +263,86 @@ Bootstrap over the 70 images (2,000 resamples, macro over supported classes; `re
 
 **Net for RQ3.** Findings-conditioning removes hallucination and turns the report writer into an honest narrator of the classifier — which is what a two-stage clinical system would want — but on this data it cannot lift the clinical-efficacy metric beyond what the classifier alone scores, and on this 70-image subsample that ceiling is 0.234. Improving the report writer now means improving the classifier's recall on rare findings (data), not the decoder.
 
+### 3.8 Confidence intervals and paired tests for the classification claims (2026-09-26)
+
+`scripts/eval_bootstrap_classification.py` → `classification_bootstrap.json`. Paired bootstrap over the 377 held-out frontal test images (2,000 resamples, seed 0): each resample draws images with replacement once and scores every system on that same resample, so differences between systems are paired. No model is re-run — it uses the saved per-image scores (`v2_classification_raw.csv`, `stage2_ensemble_predictions.csv`). Two macro AUROCs: over the 8 findings shared with RadZero (the headline metric; a class with no positives in a resample is skipped for that resample — Pneumothorax has a single positive image), and over the 5 shared findings with ≥10 positives (Atelectasis, Cardiomegaly, Pleural Effusion, Lung Opacity, Edema), which is defined in every resample.
+
+| System | Macro AUROC, 8 shared | 95% CI | Macro AUROC, 5 with ≥10 positives | 95% CI |
+|---|---:|---:|---:|---:|
+| RadZero (published) | 0.868 | [0.823, 0.903] | 0.875 | [0.827, 0.916] |
+| MedXVLM, 4-model ensemble | 0.868 | [0.827, 0.902] | 0.867 | [0.818, 0.910] |
+| MedXVLM, single model (seed 0) | 0.855 | [0.805, 0.888] | 0.862 | [0.820, 0.901] |
+| Baseline head, ImageNet ViT | 0.804 | [0.741, 0.843] | 0.817 | [0.766, 0.863] |
+| Baseline head, X-ray DINOv2 | 0.777 | [0.731, 0.816] | 0.795 | [0.744, 0.838] |
+| Zero-shot prompts (v3b) | 0.734 | [0.656, 0.771] | 0.693 | [0.629, 0.746] |
+
+| Paired difference (a − b) | Δ, 8 shared | 95% CI | CI excludes 0? | Δ, 5 stable [95% CI] |
+|---|---:|---:|:---:|---:|
+| Ensemble − RadZero | -0.000 | [-0.033, +0.033] | no | -0.008 [-0.031, +0.016] |
+| Single model (seed 0) − RadZero | -0.014 | [-0.058, +0.024] | no | -0.013 [-0.039, +0.012] |
+| Ensemble − single model (seed 0) | +0.013 | [-0.004, +0.038] | no | +0.005 [-0.015, +0.021] |
+| Attention head − baseline head, same encoder (X-ray DINOv2) | +0.078 | [+0.028, +0.119] | yes | +0.067 [+0.032, +0.105] |
+| Attention head (X-ray DINOv2) − baseline head (ImageNet ViT) | +0.051 | [+0.011, +0.100] | yes | +0.045 [+0.014, +0.081] |
+| Baseline head: ImageNet ViT − X-ray DINOv2 | +0.028 | [-0.022, +0.059] | no | +0.022 [-0.015, +0.059] |
+| RadZero − MedXVLM zero-shot | +0.135 | [+0.091, +0.208] | yes | +0.182 [+0.132, +0.237] |
+
+**What this licenses, stated plainly.**
+1. **"The ensemble matches RadZero" is now a statistical statement:** Δ = -0.000, 95% CI [-0.033, +0.033]. The two are indistinguishable on these images, and any true gap larger than ~0.03 AUROC in either direction is ruled out at 95%. It is *not* evidence that MedXVLM is better, and on the stable 5-class macro RadZero is nominally ahead (-0.008, CI straddling 0).
+2. **Even a single model is not significantly behind RadZero** (Δ -0.014, CI includes 0) — but the individual AUROC intervals are ±0.04–0.05 wide, so this test set cannot resolve differences of a couple of points between good systems. That is also why the seed spread (±0.015, §3.6.1) matters: ranking two single runs on this split is noise.
+3. **The per-label attention head's gain over the baseline head is real** (+0.05 to +0.08, both CIs exclude 0) — the project's own architecture contribution survives the test. (The "baseline head" systems fine-tune the whole encoder with a linear layer on the pooled CLS embedding, BCE loss, `configs/baseline_v2.yaml` — they are not frozen linear probes.)
+4. **The "ImageNet encoder beats the X-ray encoder" baseline-head result is not significant** (Δ +0.028, CI [-0.022, +0.059]); the controlled encoder comparison for RQ1 is §3.9.
+5. **The zero-shot gap to RadZero is real** (+0.135, CI well above 0).
+
+### 3.9 RQ1 — does the image encoder's pretraining matter? (2026-09-26)
+
+**Question (proposal §5):** does domain-specific pretraining of the image encoder — BiomedCLIP rather than general-domain CLIP — give better downstream results at this data scale? The project had never tested this directly: v2 switched to X-ray DINOv2 for practical reasons (§1), and the only encoder evidence was the baseline-head comparison, where ImageNet nominally beat X-ray DINOv2 (0.804 vs 0.777, *not* significant, §3.8).
+
+**Design.** The v2 Stage 2 recipe, unchanged (`configs/classifier_v2.yaml`: image-only per-finding attention head, ASL loss, encoder LR 1e-5 / head LR 1e-3, cosine, early stopping on val macro AUROC, frontal images, seed 0), trained on four ViT-B towers that differ *only* in their starting weights. The three new towers load their public weights directly (`train_classifier.py --vision-backbone`; `scripts/run_rq1_backbones.sh`); the X-ray DINOv2 runs are the existing four seeds (their Stage 1 tower was frozen, so they also start from the public weights). All use the same ImageNet-normalised preprocessing — a slight handicap for the two CLIP towers, whose native normalisation differs, which fine-tuning largely absorbs. Evaluation: `scripts/eval_rq1_backbones.py` (377 held-out frontal test images; NIH ChestX-ray14 test split, 25,596 images, 8 mapped findings; pointing game of each model's own attention maps on the 984 NIH radiologist boxes) and the paired bootstrap of §3.8 (seed-0 runs, same resamples). Budget allowed **one seed per new encoder** (the planned second seed for BiomedCLIP and CLIP was skipped when the first three runs took 124 min instead of ~75).
+
+| Encoder | Pretraining | Seeds | Test AUROC, 8 shared (mean ± sd) | Seed 0 [95% CI] | Test AUROC, 5 stable | NIH AUROC, 8 | Pointing game (984 boxes) | Best epoch(s) | Train time |
+|---|---|---:|---:|---:|---:|---:|---:|---|---|
+| **X-ray DINOv2** | domain-specific, self-supervised (chest X-rays) | 4 | 0.837 ± 0.015 | 0.855 [0.805, 0.888] | 0.855 ± 0.005 | 0.704 ± 0.009 | 31.5% ± 6.1 | 8, 8, 10, 12 | 30–39 min |
+| **BiomedCLIP** | domain-specific, contrastive (PubMed figures) | 1 | 0.802 | 0.802 [0.764, 0.854] | 0.844 | 0.687 | 26.7% | 15 | 45.0 min |
+| **OpenAI CLIP** | general-domain, contrastive (web image-text) | 1 | 0.792 | 0.792 [0.726, 0.834] | 0.824 | 0.667 | 24.3% | 18 | 50.8 min |
+| **ImageNet ViT** | general-domain, supervised (ImageNet) | 1 | 0.784 | 0.784 [0.719, 0.821] | 0.798 | 0.633 | 13.3% | 7 | 27.5 min |
+
+Paired differences, seed 0 vs seed 0 (a − b; 2,000 paired resamples):
+
+| Comparison | Δ AUROC, 8 shared [95% CI] | CI excludes 0? | Δ AUROC, 5 stable [95% CI] | CI excludes 0? |
+|---|---:|:---:|---:|:---:|
+| BiomedCLIP − OpenAI CLIP | +0.010 [-0.025, +0.086] | no | +0.020 [-0.009, +0.049] | no |
+| X-ray DINOv2 − BiomedCLIP | +0.053 [-0.006, +0.085] | no | +0.018 [-0.007, +0.048] | no |
+| X-ray DINOv2 − OpenAI CLIP | +0.063 [+0.029, +0.105] | **yes** | +0.038 [+0.011, +0.067] | **yes** |
+| X-ray DINOv2 − ImageNet ViT | +0.071 [+0.031, +0.119] | **yes** | +0.064 [+0.028, +0.108] | **yes** |
+| BiomedCLIP − ImageNet ViT | +0.018 [-0.009, +0.089] | no | +0.046 [+0.014, +0.084] | **yes** |
+| ImageNet ViT − OpenAI CLIP | -0.008 [-0.056, +0.039] | no | -0.026 [-0.062, +0.008] | no |
+
+Per finding (seed 0; test positives in brackets — single-digit counts are noisy):
+
+| Finding | X-ray DINOv2 | BiomedCLIP | OpenAI CLIP | ImageNet ViT |
+|---|---:|---:|---:|---:|
+| Cardiomegaly (36) | 0.94 | 0.94 | 0.89 | 0.82 |
+| Lung Opacity (42) | 0.85 | 0.85 | 0.82 | 0.80 |
+| Edema (12) | 0.88 | 0.87 | 0.88 | 0.82 |
+| Atelectasis (36) | 0.85 | 0.83 | 0.79 | 0.79 |
+| Pleural Effusion (15) | 0.79 | 0.74 | 0.74 | 0.76 |
+| Pneumonia (8) | 0.77 | 0.87 | 0.70 | 0.78 |
+| Fracture (8) | 0.81 | 0.65 | 0.57 | 0.56 |
+
+**Answer, stated plainly.**
+1. **The literal RQ1 contrast — BiomedCLIP vs general-domain CLIP — points the hypothesised way but is not resolved.** BiomedCLIP is ahead on every measure (+0.010 test AUROC, +0.020 on the stable 5, +0.019 on NIH, +2.4 points on the pointing game), but with one run each and a seed spread of ±0.015 (§3.6.1), no difference is significant. RQ1 also asked about retrieval, which was not re-tested here.
+2. **Domain-specific pretraining matters, and the encoder that clearly pays off is the X-ray-specific self-supervised one.** X-ray DINOv2's *worst* seed (0.819) beats every other encoder's run, and its paired lead over both general-domain towers is significant (+0.06 to +0.07, CIs exclude 0); over BiomedCLIP it is +0.053 with the CI just touching 0. Caveat: seed 0 is X-ray DINOv2's best seed; against its 4-seed mean (0.837) the leads shrink to +0.035 / +0.045 / +0.053 (BiomedCLIP / CLIP / ImageNet).
+3. **The domain effect grows out of distribution and is largest for localisation.** On the unseen NIH hospital the ranking is identical and the spread widens (X-ray DINOv2 0.704 → ImageNet 0.633). On the pointing game the ImageNet encoder's attention maps hit the radiologist's box 13% of the time vs 32% (X-ray DINOv2, seeds 23–36%) and 27% (BiomedCLIP) — the classification scores differ by a few points, the heatmap quality by a factor of two. This is a further measured answer to RQ4 (`docs/explainability_evaluation.md`): explainability quality tracks the encoder's pretraining domain more strongly than accuracy does.
+4. **The attention head needs a good encoder to help.** With X-ray DINOv2 the per-finding attention head beats the pooled-embedding baseline head by +0.06–0.08 (§3.8); with the ImageNet encoder it does not (0.784 vs the baseline head's 0.804 — within noise, and the two recipes also differ in loss and learning rate). The head pools *patch* tokens, so it can only add value when those patches already encode chest anatomy — which also explains why the pointing game separates encoders more sharply than AUROC.
+5. **Where general encoders fall down most is subtle findings:** Fracture 0.56–0.65 for the three non-X-ray encoders vs 0.81 for X-ray DINOv2 (8 test positives, so indicative only).
+
+**Net for RQ1:** yes, the encoder's pretraining domain matters — modestly for in-distribution accuracy, clearly for generalisation to another hospital, and most of all for whether the heatmaps point at the right place. The specific BiomedCLIP-over-CLIP advantage the proposal hypothesised is in the predicted direction but too small to confirm with one run each on 377 test images; the encoder the project actually uses (X-ray DINOv2, self-supervised on chest X-rays) is the best of the four on every measure.
+
 ## 4. What this does and doesn't change about the project's story
 
 - **The headline classification number is now real.** 0.855/0.862 macro AUROC, blind, on held-out data, against corrected labels, within ~1 point of a published state-of-the-art zero-shot system on the same images. This replaces the 0.865 text-fusion figure, which should no longer be quoted as classification accuracy.
 - **Most of the recovery is data hygiene, not architecture**: fixing the labeler, dropping lateral views, and using a CXR-pretrained encoder took a linear head from 0.57 to ~0.78–0.80; the pipeline design adds the last ~5–8 points. That is an honest and defensible attribution, and the ablation table above is what supports it.
+- **RQ1 answered (§3.9, 2026-09-26):** the image encoder's pretraining domain matters — X-ray DINOv2 beats BiomedCLIP, OpenAI CLIP and ImageNet ViT on test AUROC, on the unseen NIH hospital and, most sharply, on heatmap localisation (32% vs 13% pointing game for ImageNet); the BiomedCLIP-over-CLIP contrast the proposal named is in the predicted direction but not significant with one run each. §3.8 adds 95% CIs: the ensemble equals RadZero (Δ 0.000, CI ±0.033).
 - **After the v2c run (§3.7, 2026-09-21):** conditioning the report writer on the classifier's findings gives 0 % hallucination and a faithful verbaliser, but CE F1 0.165 (greedy) vs v2-beam 0.176 — inside a ±0.10 noise band whose ceiling on this 70-image subsample is 0.234 (the classifier flags only 18/70). Stage 3 is now limited by classifier recall on rare findings, not by the decoder. App default stays v2 + beam; v2c is selectable.
 - **After the 2026-09-20 overnight run (§3.6):** the honest classification number is **0.837 ± 0.015 (single seed) / 0.868 (4-seed ensemble)** — the ensemble equals RadZero on identical images; the 0.855 quoted earlier was the best seed. The demo app now serves the ensemble. Stage 3's best configuration is v2 + beam-3 decoding (CE F1 0.176, 3% hallucination); v2b showed the 50% abnormal oversampling is essential, and that val NLL selects the collapsed model. Zero-shot rose to 0.734 with finding-sentence training but remains data-scale-limited.
 - **Stage 3 was retrained on 2026-09-19 (§3.4).** The boilerplate collapse documented in `cross_dataset_evaluation.md` §5 is broken (5 → 61 distinct outputs on 150 images) and CE macro F1 now matches CheXOne-instruct on the same images (0.152 vs 0.149, frontal). The cost is a 10% (frontal) device/surgery hallucination rate that the Phase 3 model and CheXOne do not have, and the modal normal report still covers 54% of frontal outputs. The next lever is not more epochs (val loss turned up at epoch 4) but a stronger visual signal or a hallucination-aware training objective — out of scope for this rebuild.
@@ -274,6 +351,7 @@ Bootstrap over the 70 images (2,000 resamples, macro over supported classes; `re
 ## 5. Files
 
 - Code: `src/medxvlm/data/labeler.py` (negation scope), `src/medxvlm/models/vision_encoder.py` (backbone option), `src/medxvlm/data/dataset.py` (projection filter), `src/medxvlm/models/baseline_classifier.py`, `src/medxvlm/engine/loop_utils.py` (`load_vision_encoder`), `scripts/train_{align,classifier,baseline,report}.py`, `scripts/prepare_data.py`, `scripts/validate_labeler.py`, `scripts/run_v2_rebuild.sh`, `scripts/eval_v2_classification.py`, `scripts/eval_v2_report_generation.py`, `scripts/eval_v2_score_reports.py`, `scripts/eval_external_chestxray14.py`.
+- §3.8–3.9: `scripts/eval_bootstrap_classification.py`, `scripts/eval_rq1_backbones.py`, `scripts/run_rq1_backbones.sh`, `scripts/run_rq1_eval_after_training.sh`, `runs/rq1_backbones.log`, `runs/rq1_eval.log`, `checkpoints/classifier_v2/rq1_*_s0/`; results `classification_bootstrap.json`, `rq1_backbones_summary.json`, `rq1_backbones_test_predictions.csv`.
 - Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`, `report_gen_v2b.yaml`, `report_gen_v2c.yaml`, `align_v3_sentence.yaml`, `align_v3b_findings.yaml`.
 - v2c (§3.7): `src/medxvlm/data/findings_prompt.py`, `scripts/cache_stage2_predictions.py`, `scripts/run_v2c_{findings_conditioned,resume,eval_only}.sh`, `runs/v2c_chain.log`, `runs/v2c_resume_chain.log`, `checkpoints/report_gen_v2c/{best,epoch3}.pt`; results `stage2_ensemble_{predictions.csv,thresholds.json}`, `classifier_verbalised_generations.csv`, `medxvlm_stage3_v2c{,_beam3,_nofindings_beam3,_epoch3,_epoch3_beam3}_generations.csv`, `report_generation_scores_v2c.json`, `v2c_full_val_selection.json`, `report_ce_f1_bootstrap.json`.
 - Data: `data/processed/manifest.csv` (corrected); `data/processed/manifest_v1_phase3_labels.csv` (the Phase 3 labels, kept for reproducibility).

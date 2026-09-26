@@ -1,0 +1,319 @@
+{
+  "groups": {
+    "RQ1 X-ray DINOv2": {
+      "pretraining": "domain-specific, self-supervised (chest X-rays)",
+      "backbone": "xraydinov2",
+      "per_seed": {
+        "local_on": {
+          "best_epoch": 8,
+          "val_macro_auroc": 0.8332288056315027,
+          "backbone": "xraydinov2",
+          "test_auroc_8": 0.8548479935299624,
+          "test_auroc_5_stable": 0.8620772647675847,
+          "test_auroc_13": 0.8287203398399028,
+          "per_class_auroc": {
+            "No Finding": 0.8197658496508284,
+            "Enlarged Cardiomediastinum": null,
+            "Cardiomegaly": 0.9389051808406647,
+            "Lung Opacity": 0.853731343283582,
+            "Lung Lesion": 0.6527777777777777,
+            "Edema": 0.8792237442922375,
+            "Consolidation": 0.832258064516129,
+            "Pneumonia": 0.7710027100271003,
+            "Atelectasis": 0.8514173998044966,
+            "Pneumothorax": 0.949468085106383,
+            "Pleural Effusion": 0.787108655616943,
+            "Pleural Other": 0.6639928698752229,
+            "Fracture": 0.8079268292682926,
+            "Support Devices": 0.9657859078590785
+          },
+          "nih_auroc_8": 0.7138145173686774,
+          "pointing_game_hit_rate": 0.33739837398373984,
+          "pointing_game_n_boxes": 984
+        },
+        "seed1": {
+          "best_epoch": 8,
+          "val_macro_auroc": 0.8281353758179844,
+          "backbone": "xraydinov2",
+          "test_auroc_8": 0.8331663802090359,
+          "test_auroc_5_stable": 0.8494748458250875,
+          "test_auroc_13": 0.7922079074710424,
+          "per_class_auroc": {
+            "No Finding": 0.8117554429686431,
+            "Enlarged Cardiomediastinum": null,
+            "Cardiomegaly": 0.949250570218312,
+            "Lung Opacity": 0.8619758351101635,
+            "Lung Lesion": 0.6554951690821256,
+            "Edema": 0.8292237442922374,
+            "Consolidation": 0.8059139784946237,
+            "Pneumonia": 0.8431571815718157,
+            "Atelectasis": 0.840257412838058,
+            "Pneumothorax": 0.7712765957446809,
+            "Pleural Effusion": 0.7666666666666667,
+            "Pleural Other": 0.47504456327985733,
+            "Fracture": 0.8035230352303523,
+            "Support Devices": 0.8851626016260162
+          },
+          "nih_auroc_8": 0.7011915418463074,
+          "pointing_game_hit_rate": 0.3323170731707317,
+          "pointing_game_n_boxes": 984
+        },
+        "seed2": {
+          "best_epoch": 10,
+          "val_macro_auroc": 0.8497343919985758,
+          "backbone": "xraydinov2",
+          "test_auroc_8": 0.8389932457845197,
+          "test_auroc_5_stable": 0.8561815013910786,
+          "test_auroc_13": 0.8081664782606974,
+          "per_class_auroc": {
+            "No Finding": 0.7925167739285226,
+            "Enlarged Cardiomediastinum": null,
+            "Cardiomegaly": 0.9457478005865102,
+            "Lung Opacity": 0.8648898365316275,
+            "Lung Lesion": 0.5540458937198067,
+            "Edema": 0.8522831050228311,
+            "Consolidation": 0.8822580645161291,
+            "Pneumonia": 0.8919376693766938,
+            "Atelectasis": 0.8119094167481263,
+            "Pneumothorax": 0.6888297872340425,
+            "Pleural Effusion": 0.8060773480662983,
+            "Pleural Other": 0.5819964349376114,
+            "Fracture": 0.8502710027100271,
+            "Support Devices": 0.9834010840108401
+          },
+          "nih_auroc_8": 0.705902956562525,
+          "pointing_game_hit_rate": 0.3648373983739837,
+          "pointing_game_n_boxes": 984
+        },
+        "seed3": {
+          "best_epoch": 12,
+          "val_macro_auroc": 0.8103981219071817,
+          "backbone": "xraydinov2",
+          "test_auroc_8": 0.8192847536465623,
+          "test_auroc_5_stable": 0.8527399395714539,
+          "test_auroc_13": 0.7855352538518758,
+          "per_class_auroc": {
+            "No Finding": 0.8187046419279748,
+            "Enlarged Cardiomediastinum": null,
+            "Cardiomegaly": 0.9282339524275007,
+            "Lung Opacity": 0.8700071073205401,
+            "Lung Lesion": 0.6228864734299517,
+            "Edema": 0.8714611872146119,
+            "Consolidation": 0.8500000000000001,
+            "Pneumonia": 0.785230352303523,
+            "Atelectasis": 0.8433528836754643,
+            "Pneumothorax": 0.8430851063829787,
+            "Pleural Effusion": 0.750644567219153,
+            "Pleural Other": 0.3992869875222816,
+            "Fracture": 0.6622628726287263,
+            "Support Devices": 0.9668021680216802
+          },
+          "nih_auroc_8": 0.6931423818722948,
+          "pointing_game_hit_rate": 0.22560975609756098,
+          "pointing_game_n_boxes": 984
+        }
+      },
+      "test_auroc_8": {
+        "mean": 0.83657309329252,
+        "std": 0.014723241247770835,
+        "n_seeds": 4
+      },
+      "test_auroc_5_stable": {
+        "mean": 0.8551183878888011,
+        "std": 0.005387106865965286,
+        "n_seeds": 4
+      },
+      "test_auroc_13": {
+        "mean": 0.8036574948558797,
+        "std": 0.019217923928183268,
+        "n_seeds": 4
+      },
+      "nih_auroc_8": {
+        "mean": 0.7035128494124512,
+        "std": 0.008655865847066664,
+        "n_seeds": 4
+      },
+      "pointing_game_hit_rate": {
+        "mean": 0.31504065040650403,
+        "std": 0.06130781231381648,
+        "n_seeds": 4
+      }
+    },
+    "RQ1 BiomedCLIP": {
+      "pretraining": "domain-specific, contrastive (PubMed figures)",
+      "backbone": "biomedclip",
+      "per_seed": {
+        "rq1_biomedclip_s0": {
+          "best_epoch": 15,
+          "val_macro_auroc": 0.7944204415502965,
+          "backbone": "biomedclip",
+          "test_auroc_8": 0.801853069860855,
+          "test_auroc_5_stable": 0.8440443098053908,
+          "test_auroc_13": 0.7640581698989691,
+          "per_class_auroc": {
+            "No Finding": 0.8051143365740107,
+            "Enlarged Cardiomediastinum": null,
+            "Cardiomegaly": 0.9445259042033236,
+            "Lung Opacity": 0.8477611940298506,
+            "Lung Lesion": 0.5833333333333333,
+            "Edema": 0.8655251141552511,
+            "Consolidation": 0.8806451612903226,
+            "Pneumonia": 0.8712737127371274,
+            "Atelectasis": 0.8250244379276637,
+            "Pneumothorax": 0.6702127659574468,
+            "Pleural Effusion": 0.7373848987108655,
+            "Pleural Other": 0.3440285204991087,
+            "Fracture": 0.6531165311653117,
+            "Support Devices": 0.9048102981029811
+          },
+          "nih_auroc_8": 0.6865189786374417,
+          "pointing_game_hit_rate": 0.26727642276422764,
+          "pointing_game_n_boxes": 984
+        }
+      },
+      "test_auroc_8": {
+        "mean": 0.801853069860855,
+        "std": null,
+        "n_seeds": 1
+      },
+      "test_auroc_5_stable": {
+        "mean": 0.8440443098053908,
+        "std": null,
+        "n_seeds": 1
+      },
+      "test_auroc_13": {
+        "mean": 0.7640581698989691,
+        "std": null,
+        "n_seeds": 1
+      },
+      "nih_auroc_8": {
+        "mean": 0.6865189786374417,
+        "std": null,
+        "n_seeds": 1
+      },
+      "pointing_game_hit_rate": {
+        "mean": 0.26727642276422764,
+        "std": null,
+        "n_seeds": 1
+      }
+    },
+    "RQ1 OpenAI CLIP": {
+      "pretraining": "general-domain, contrastive (web image-text)",
+      "backbone": "clip_openai",
+      "per_seed": {
+        "rq1_clip_openai_s0": {
+          "best_epoch": 18,
+          "val_macro_auroc": 0.8019947115186551,
+          "backbone": "clip_openai",
+          "test_auroc_8": 0.7916745100247258,
+          "test_auroc_5_stable": 0.8237166374776054,
+          "test_auroc_13": 0.7525892577812586,
+          "per_class_auroc": {
+            "No Finding": 0.7937149116801315,
+            "Enlarged Cardiomediastinum": null,
+            "Cardiomegaly": 0.8879113717823395,
+            "Lung Opacity": 0.8211087420042644,
+            "Lung Lesion": 0.5413647342995169,
+            "Edema": 0.8817351598173516,
+            "Consolidation": 0.8467741935483871,
+            "Pneumonia": 0.6968157181571816,
+            "Atelectasis": 0.7908113391984359,
+            "Pneumothorax": 0.9441489361702128,
+            "Pleural Effusion": 0.7370165745856353,
+            "Pleural Other": 0.36631016042780745,
+            "Fracture": 0.5738482384823849,
+            "Support Devices": 0.9021002710027101
+          },
+          "nih_auroc_8": 0.6672268606331471,
+          "pointing_game_hit_rate": 0.24288617886178862,
+          "pointing_game_n_boxes": 984
+        }
+      },
+      "test_auroc_8": {
+        "mean": 0.7916745100247258,
+        "std": null,
+        "n_seeds": 1
+      },
+      "test_auroc_5_stable": {
+        "mean": 0.8237166374776054,
+        "std": null,
+        "n_seeds": 1
+      },
+      "test_auroc_13": {
+        "mean": 0.7525892577812586,
+        "std": null,
+        "n_seeds": 1
+      },
+      "nih_auroc_8": {
+        "mean": 0.6672268606331471,
+        "std": null,
+        "n_seeds": 1
+      },
+      "pointing_game_hit_rate": {
+        "mean": 0.24288617886178862,
+        "std": null,
+        "n_seeds": 1
+      }
+    },
+    "RQ1 ImageNet ViT": {
+      "pretraining": "general-domain, supervised (ImageNet)",
+      "backbone": "biomedclip",
+      "per_seed": {
+        "rq1_imagenet_vit_s0": {
+          "best_epoch": 7,
+          "val_macro_auroc": 0.7644024153042374,
+          "backbone": "biomedclip",
+          "test_auroc_8": 0.7836845407296964,
+          "test_auroc_5_stable": 0.7975858031367238,
+          "test_auroc_13": 0.7325902605237864,
+          "per_class_auroc": {
+            "No Finding": 0.7681432288100779,
+            "Enlarged Cardiomediastinum": null,
+            "Cardiomegaly": 0.8177745193874226,
+            "Lung Opacity": 0.8020611229566453,
+            "Lung Lesion": 0.5277777777777778,
+            "Edema": 0.8178082191780821,
+            "Consolidation": 0.8424731182795699,
+            "Pneumonia": 0.7777777777777778,
+            "Atelectasis": 0.793010752688172,
+            "Pneumothorax": 0.9441489361702128,
+            "Pleural Effusion": 0.7572744014732966,
+            "Pleural Other": 0.23707664884135476,
+            "Fracture": 0.559620596205962,
+            "Support Devices": 0.8787262872628727
+          },
+          "nih_auroc_8": 0.6327884079695476,
+          "pointing_game_hit_rate": 0.133130081300813,
+          "pointing_game_n_boxes": 984
+        }
+      },
+      "test_auroc_8": {
+        "mean": 0.7836845407296964,
+        "std": null,
+        "n_seeds": 1
+      },
+      "test_auroc_5_stable": {
+        "mean": 0.7975858031367238,
+        "std": null,
+        "n_seeds": 1
+      },
+      "test_auroc_13": {
+        "mean": 0.7325902605237864,
+        "std": null,
+        "n_seeds": 1
+      },
+      "nih_auroc_8": {
+        "mean": 0.6327884079695476,
+        "std": null,
+        "n_seeds": 1
+      },
+      "pointing_game_hit_rate": {
+        "mean": 0.133130081300813,
+        "std": null,
+        "n_seeds": 1
+      }
+    }
+  },
+  "recipe": "configs/classifier_v2.yaml (identical for all); only the tower's initial weights differ",
+  "n_test_images": 377
+}

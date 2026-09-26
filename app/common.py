@@ -106,8 +106,8 @@ def load_model_card() -> dict:
         s = cls["systems"]
         card["per_class_support"] = s["v2_stage2_image_only"]["per_class_positive_support"]
         card["auroc_systems"] = {
-            "Linear probe, ImageNet ViT": s["v2_baseline_imagenet_vit"]["macro_auroc_8_shared_classes"],
-            "Linear probe, X-ray DINOv2": s["v2_baseline_xraydinov2_linear"]["macro_auroc_8_shared_classes"],
+            "Baseline head, ImageNet ViT": s["v2_baseline_imagenet_vit"]["macro_auroc_8_shared_classes"],
+            "Baseline head, X-ray DINOv2": s["v2_baseline_xraydinov2_linear"]["macro_auroc_8_shared_classes"],
             "Zero-shot prompts (v3b)": s["v3b_stage1_findings_zero_shot"]["macro_auroc_8_shared_classes"],
             "RadZero (published)": s["radzero_zero_shot_rescored"]["macro_auroc_8_shared_classes"],
         }
@@ -152,6 +152,17 @@ def load_model_card() -> dict:
             "center": hit("baseline_center"),
             "random": hit("baseline_random_expected"),
         }
+    if bs := _load("classification_bootstrap.json"):
+        diff = bs["paired_differences"].get("MedXVLM, 4-model ensemble − RadZero (published)", {}).get("8")
+        card["ensemble_ci"] = bs["systems"]["MedXVLM, 4-model ensemble"]["ci95_8"]
+        card["radzero_ci"] = bs["systems"]["RadZero (published)"]["ci95_8"]
+        card["ensemble_vs_radzero"] = diff
+    if rq1 := _load("rq1_backbones_summary.json"):
+        pretty = {"RQ1 X-ray DINOv2": "MedXVLM encoder: X-ray DINOv2", "RQ1 BiomedCLIP": "BiomedCLIP",
+                  "RQ1 OpenAI CLIP": "OpenAI CLIP", "RQ1 ImageNet ViT": "ImageNet ViT"}
+        card["encoders_auroc"] = {pretty[g]: v["test_auroc_8"]["mean"] for g, v in rq1["groups"].items() if g in pretty}
+        card["encoders_nih"] = {pretty[g]: v["nih_auroc_8"]["mean"] for g, v in rq1["groups"].items() if g in pretty and v["nih_auroc_8"]}
+        card["encoders_pointing"] = {pretty[g]: v["pointing_game_hit_rate"]["mean"] for g, v in rq1["groups"].items() if g in pretty and v["pointing_game_hit_rate"]}
     if a := _load("sentence_attribution_summary.json"):
         card["visual_attention_share"] = a.get("indiana_frontal_test", {}).get("visual_share_excl_sink_mean_all")
     return card

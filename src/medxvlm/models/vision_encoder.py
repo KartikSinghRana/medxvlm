@@ -8,7 +8,13 @@
   tower could not produce a usable image-only classifier on ~3k frontal
   training images (docs/cross_dataset_evaluation.md).
 
-Both expose the same contract (768-d patch tokens + pooled CLS), so every
+Two general-domain towers were added for the RQ1 encoder comparison
+(docs/v2_rebuild.md §3.8), both timm ViT-B/16:
+
+- ``"clip_openai"``: OpenAI CLIP's image tower (general-domain contrastive).
+- ``"imagenet_vit"``: ImageNet-21k -> 1k supervised ViT-B/16.
+
+All expose the same contract (768-d patch tokens + pooled CLS), so every
 downstream head is backbone-agnostic; only the patch-grid side length
 differs (14 vs 16), and every consumer already derives that from the
 token count rather than a constant.
@@ -27,11 +33,13 @@ logger = logging.getLogger(__name__)
 
 BIOMEDCLIP_HUB_ID = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
 FALLBACK_TIMM_MODEL_NAME = "vit_base_patch16_224"
+CLIP_OPENAI_TIMM_MODEL_NAME = "vit_base_patch16_clip_224.openai"
 XRAYDINOV2_HUB_ID = "StanfordAIMI/dinov2-base-xray-224"
 IMAGE_SIZE = 224
 PATCH_SIZE = 16  # biomedclip / ImageNet ViT-B/16; xraydinov2 is patch 14 (see patch_grid_size)
 
-BackboneName = Literal["biomedclip", "xraydinov2"]
+BackboneName = Literal["biomedclip", "xraydinov2", "clip_openai", "imagenet_vit"]
+TIMM_BACKBONES = ("biomedclip", "clip_openai", "imagenet_vit")
 DEFAULT_BACKBONE: BackboneName = "biomedclip"
 
 
@@ -97,8 +105,15 @@ class VisionEncoder(nn.Module):
             self.embed_dim: int = self.backbone.config.hidden_size
             self.num_prefix_tokens: int = 1 + getattr(self.backbone.config, "num_register_tokens", 0)
             self.patch_size: int = self.backbone.config.patch_size
-        elif backbone == "biomedclip":
-            self.backbone, self.used_biomedclip_weights = self._build_biomedclip_backbone(pretrained)
+        elif backbone in TIMM_BACKBONES:
+            if backbone == "biomedclip":
+                self.backbone, self.used_biomedclip_weights = self._build_biomedclip_backbone(pretrained)
+            else:
+                import timm
+
+                name = CLIP_OPENAI_TIMM_MODEL_NAME if backbone == "clip_openai" else FALLBACK_TIMM_MODEL_NAME
+                self.backbone = timm.create_model(name, pretrained=pretrained, num_classes=0)
+                self.used_biomedclip_weights = False
             self.embed_dim = self.backbone.num_features
             self.num_prefix_tokens = getattr(self.backbone, "num_prefix_tokens", 1)
             self.patch_size = PATCH_SIZE
@@ -144,6 +159,10 @@ def infer_backbone_from_state_dict(state_dict: dict, prefix: str = "vision_encod
     # marker, so loaders sniff the key layout instead -- HF DINOv2 keys start
     # with `backbone.embeddings.`, timm ViT keys with `backbone.patch_embed.`.
     """
+    # biomedclip and imagenet_vit share one timm architecture, so "biomedclip" loads either;
+    # the CLIP tower differs (pre-norm before the blocks), so it needs its own builder.
+    if prefix + "backbone.norm_pre.weight" in state_dict:
+        return "clip_openai"
     for key in state_dict:
         if key.startswith(prefix + "backbone.embeddings."):
             return "xraydinov2"

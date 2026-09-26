@@ -202,7 +202,7 @@ PYTHONPATH=src streamlit run app/app.py
 
 ## Project status
 
-**Phases 1–5 complete; v2 rebuild complete (2026-09-19); overnight follow-ups, explainability evaluation and the v2c findings-conditioned Stage 3 complete (2026-09-21). Remaining: final report and presentation.**
+**Phases 1–5 complete; v2 rebuild complete (2026-09-19); overnight follow-ups, explainability evaluation and the v2c findings-conditioned Stage 3 complete (2026-09-21); confidence intervals and the RQ1 encoder comparison complete (2026-09-26). Remaining: final report and presentation.**
 
 - Phase 1 (skeleton, environment, literature review, proposal) and Phase 2
   (model wiring, `scripts/sanity_check_models.py`) — documented in
@@ -230,6 +230,13 @@ PYTHONPATH=src streamlit run app/app.py
   (a perfect verbaliser of the classifier). Stage 3 is now bounded by classifier
   recall on rare findings, not by the decoder. App default stays v2 + beam; v2c
   is selectable.
+- Statistics and RQ1, 2026-09-26 (`docs/v2_rebuild.md` §3.8–3.9): a paired bootstrap makes the headline a
+  statistical claim — ensemble vs RadZero differ by 0.000 (95% CI −0.033 to +0.033), and the attention head's
+  gain over a plain linear head is significant. RQ1 (does the encoder's pretraining matter?): the same
+  classifier on BiomedCLIP, OpenAI CLIP and ImageNet ViT scores 0.802 / 0.792 / 0.784 vs 0.837 ± 0.015 for
+  X-ray DINOv2; the gap widens on the unseen NIH hospital and is largest for heatmap localisation (32% vs 13%
+  pointing game for ImageNet). BiomedCLIP vs general CLIP, the contrast RQ1 names, points the predicted way
+  but is not significant with one run each.
 - Explainability evaluation 2026-09-21
   ([docs/explainability_evaluation.md](docs/explainability_evaluation.md)):
   the classifier's attention maps put their hottest pixel inside the

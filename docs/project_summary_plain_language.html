@@ -66,7 +66,7 @@
     <div class="badge">Compared Against 2 Published AI Models</div>
     <div class="badge">Rebuilt &amp; Re-tested Honestly</div>
   </div>
-  <div class="meta">Prepared 2026-09-21 (updated after the explainability evaluation and the findings-conditioned report writer) &nbsp;·&nbsp; Kartik Singh Rana</div>
+  <div class="meta">Prepared 2026-09-26 (updated with confidence intervals and the image-encoder comparison) &nbsp;·&nbsp; Kartik Singh Rana</div>
 </div>
 
 <section>
@@ -121,6 +121,20 @@
 <div class="callout good">
 <b>The numbers to quote: 84% ± 1.5 for a single model, 87% (0.868 AUROC) when four independently-trained copies are averaged — the same score as RadZero, a published system trained on roughly 100× more data, on identical images.</b> Averaging several models is a standard, honest technique; it also makes the model slightly better on X-rays from a different hospital (72% vs 70%). Most of the recovery came from cleaning the labels, front views and the X-ray-specific encoder; the project's own attention-based design adds a further 5–8 points over a plain classifier on the same data (78–80%).
 </div>
+
+<h3>Is "equal to RadZero" a real tie, or luck?</h3>
+<p>A statistical check (re-drawing the 377 test X-rays thousands of times and re-scoring both systems on each draw) puts the difference between the 4-model average and RadZero at <b>0.000, with a 95% range of −0.033 to +0.033</b>. In plain terms: on these images the two are indistinguishable, and any real gap larger than about 3 points in either direction is ruled out. The same check confirms that the project's own design, the per-finding attention step, adds a real 5–8 points over a plain classifier.</p>
+
+<h3>Does it matter what the image encoder learned beforehand?</h3>
+<p>One of the project's four research questions asked whether an image encoder pretrained on <i>medical</i> images beats one pretrained on everyday photos. The same classifier was retrained on four encoders:</p>
+<div class="bar-wrap">
+  <div class="bar-row"><div class="bar-label">X-ray DINOv2 (learned from chest X-rays; used by MedXVLM)</div><div class="bar-track"><div class="bar-fill green" style="width:83.7%"></div><div class="chance-line"></div></div><div class="bar-value">84%</div></div>
+  <div class="bar-row"><div class="bar-label">BiomedCLIP (medical papers' figures)</div><div class="bar-track"><div class="bar-fill" style="width:80.2%"></div><div class="chance-line"></div></div><div class="bar-value">80%</div></div>
+  <div class="bar-row"><div class="bar-label">OpenAI CLIP (web photos and captions)</div><div class="bar-track"><div class="bar-fill grey" style="width:79.2%"></div><div class="chance-line"></div></div><div class="bar-value">79%</div></div>
+  <div class="bar-row"><div class="bar-label">ImageNet (everyday photos)</div><div class="bar-track"><div class="bar-fill grey" style="width:78.4%"></div><div class="chance-line"></div></div><div class="bar-value">78%</div></div>
+</div>
+<p class="footnote">Disease-spotting score (AUROC) on the same 377 test X-rays. X-ray DINOv2 is the average of 4 training runs, the others one run each.</p>
+<p>The X-ray-trained encoder wins, and the gap grows where it matters: on the unseen hospital (70% vs 63% for ImageNet) and above all for the heatmaps, where the ImageNet encoder's maps land on the radiologist's box only <b>13%</b> of the time against <b>32%</b>. The specific comparison the proposal named, medical BiomedCLIP vs general CLIP, goes the predicted way but is too close to call with one training run each.</p>
 </section>
 
 <section>
@@ -210,6 +224,7 @@ Both outside systems were <b>actually run</b> on this project's test images — 
 <li><b>The first headline number (87%) was misleading</b> — measured with the answer key; the honest image-only score was 51%. Catching this by testing the hard way is one of the project's most important outcomes.</li>
 <li><b>Root causes were found and fixed</b>: a label-reading bug that mislabelled thousands of normal X-rays, a training setup that leaked the answer, side-view images diluting the data, a non-specialised image encoder — and, for report writing, a "safe answer" collapse.</li>
 <li><b>After the rebuild and the overnight follow-ups:</b> disease-spotting at <b>84% ± 1.5 per model, 87% averaged over four — equal to RadZero</b>; report-writing clinical-efficacy <b>0.176, ahead of CheXOne's 0.149</b>; both on identical test images with identical corrected labels. An earlier single-run figure of 86% was the best of four seeds and should not be quoted alone.</li>
+<li><b>All four research questions now have measured answers.</b> The newest: the image encoder's pretraining matters, a little for accuracy and a lot for whether the heatmaps point at the right place.</li>
 <li><b>The report writer's ceiling is the classifier:</b> telling it the classifier's findings removes invented equipment completely (0%) but cannot lift the score above what the classifier already knows (a hard cap of 0.234 on the test images); better reports now need better rare-finding detection, i.e. more data.</li>
 <li><b>Explainability is now measured, not assumed:</b> the classifier's heatmaps land inside the radiologist's box on <b>41%</b> of 984 real boxes (random: 7.5%); the report writer, by contrast, barely looks at the image at all.</li>
 <li><b>Open problems, stated plainly:</b> the report writer still gives the same "normal" paragraph for ~6 in 10 front-view images and invents equipment in ~3%; it misses most specific abnormal findings; zero-shot matching sits at 73% vs 87% for RadZero (a data-scale gap); and after the label fix some conditions have very few true test cases (one pneumothorax, five consolidations), so their individual scores are not meaningful.</li>

@@ -63,7 +63,10 @@ with classification:
     nih = round(card["nih_ensemble_auroc"], 3) if card.get("nih_ensemble_auroc") else None
     with st.container(horizontal=True):
         st.metric("Ensemble AUROC", f"{ens:.3f}", f"{ens - single:+.3f}", delta_description="vs one model", border=True, height=128,
-                  help="Probability average of 4 classifiers trained with different random seeds. Macro AUROC over the 8 findings shared with RadZero.")
+                  help="Probability average of 4 classifiers trained with different random seeds. Macro AUROC over the 8 findings shared with RadZero."
+                       + (f" 95% CI {card['ensemble_ci'][0]:.3f}–{card['ensemble_ci'][1]:.3f}; difference from RadZero "
+                       f"{0.0 if abs(card['ensemble_vs_radzero']['diff']) < 5e-4 else card['ensemble_vs_radzero']['diff']:.3f} (95% CI {card['ensemble_vs_radzero']['ci95'][0]:+.3f} to {card['ensemble_vs_radzero']['ci95'][1]:+.3f})."
+                       if card.get("ensemble_vs_radzero") else ""))
         st.metric("One model", f"{single:.3f} ± {std:.3f}", border=True, height=128, help="Mean ± standard deviation over the 4 seeds.")
         st.metric("RadZero, same images", f"{card['radzero_auroc']:.3f}", border=True, height=128,
                   help="Published model (Deepnoid), run from its public weights on the identical images and labels.")
@@ -75,8 +78,25 @@ with classification:
         st.markdown("**Macro AUROC**")
         st.caption(f"8 findings shared with RadZero, {card.get('n_test_images', 377)} held-out frontal X-rays")
         st.altair_chart(ranking_chart(card["auroc_systems"], fmt=".3f", axis_fmt=".2f", domain=(0.5, 0.92), baseline=0.5), width="stretch")
-        st.caption("AUROC 0.5 is chance, 1.0 is perfect. Linear probes use the same data and image encoder, isolating what the "
-                   "per-label attention head adds; zero-shot prompts use no labels at all.")
+        if card.get("ensemble_vs_radzero"):
+            d = card["ensemble_vs_radzero"]
+            st.caption(f"The ensemble and RadZero are statistically indistinguishable on these images: difference {abs(d['diff']) if abs(d['diff']) < 5e-4 else d['diff']:.3f}, "
+                       f"95% confidence interval {d['ci95'][0]:+.3f} to {d['ci95'][1]:+.3f} (paired bootstrap).")
+        st.caption("AUROC 0.5 is chance, 1.0 is perfect. The baselines fine-tune the same encoders with a plain linear head on "
+                   "the pooled image embedding, isolating what the per-finding attention head adds; zero-shot prompts use no labels at all.")
+
+    if card.get("encoders_auroc"):
+        with st.container(border=True):
+            st.markdown("**Which image encoder?**")
+            st.caption("The same classifier trained on four image encoders that differ only in how they were pretrained. "
+                       "Left: accuracy on the 377 test X-rays. Right: how often its heatmaps point inside a radiologist's box.")
+            enc_left, enc_right = st.columns(2, gap="large")
+            with enc_left:
+                st.altair_chart(ranking_chart(card["encoders_auroc"], fmt=".3f", axis_fmt=".2f", domain=(0.5, 0.9), baseline=0.5), width="stretch")
+            with enc_right:
+                st.altair_chart(ranking_chart(card["encoders_pointing"], fmt=".0%", domain=(0, 0.4)), width="stretch")
+            st.caption("X-ray DINOv2 is pretrained on chest X-rays and is what MedXVLM uses (mean of 4 runs); the others are one run each. "
+                       "The domain matters most for the heatmaps: ImageNet-pretrained maps land on the finding less than half as often.")
 
 with reporting:
     ce = card.get("report_systems", {})

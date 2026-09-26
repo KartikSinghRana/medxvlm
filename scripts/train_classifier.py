@@ -36,6 +36,7 @@ from medxvlm.models.baseline_classifier import asymmetric_loss, multilabel_bce_l
 from medxvlm.models.classifier_head import ClassifierHead  # noqa: E402
 from medxvlm.models.labels import CHEXPERT_LABELS  # noqa: E402
 from medxvlm.models.text_encoder import TextEncoder  # noqa: E402
+from medxvlm.models.vision_encoder import VisionEncoder  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,6 +47,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--run-name", type=str, default=None, help="Subdirectory under output_dir/log_dir (defaults to the stage1 checkpoint's parent dir name).")
     parser.add_argument("--seed", type=int, default=None, help="Override config seed (used for the seed ensemble).")
+    parser.add_argument("--vision-backbone", type=str, default=None,
+                        help="Build the vision tower from pretrained weights (biomedclip | clip_openai | imagenet_vit | xraydinov2) "
+                             "instead of a Stage 1 checkpoint -- the RQ1 encoder comparison. Image-only configs only.")
     return parser.parse_args()
 
 
@@ -74,11 +78,14 @@ class Stage2Model(nn.Module):
         return self.head(patch_tokens, text_embeds)
 
 
-def make_collate(text_encoder: TextEncoder, max_length: int):
+def make_collate(text_encoder: TextEncoder | None, max_length: int):
     def collate(batch):
         images, targets, reports = zip(*batch)
         pixel_values = torch.stack(images)
         targets = torch.stack(targets)
+        if text_encoder is None:  # image-only run without a text tower: placeholders, never read
+            dummy = torch.zeros(len(images), 1, dtype=torch.long)
+            return pixel_values, targets, dummy, dummy
         encoded = text_encoder.tokenize(list(reports), max_length=max_length)
         return pixel_values, targets, encoded["input_ids"], encoded["attention_mask"]
 
@@ -128,17 +135,24 @@ def save_epoch_snapshot(model: Stage2Model, loader, device, snapshot_dir: Path, 
 
 def main() -> int:
     args = parse_args()
-    config = load_config(args.config, {"epochs": args.epochs, "batch_size": args.batch_size, "seed": args.seed})
-    stage1_checkpoint = args.stage1_checkpoint or (REPO_ROOT / config["stage1_checkpoint"])
-    run_name = args.run_name or Path(stage1_checkpoint).parent.name
+    config = load_config(args.config, {"epochs": args.epochs, "batch_size": args.batch_size, "seed": args.seed,
+                                       "vision_backbone": args.vision_backbone})
+    vision_backbone = config.get("vision_backbone")
+    stage1_checkpoint = None if vision_backbone else (args.stage1_checkpoint or (REPO_ROOT / config["stage1_checkpoint"]))
+    run_name = args.run_name or (vision_backbone or Path(stage1_checkpoint).parent.name)
 
     set_seed(config["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     use_text_fusion = config.get("use_text_fusion", True)
-    vision_encoder, text_encoder = load_stage1_encoders(stage1_checkpoint, device)
-    for param in text_encoder.parameters():
-        param.requires_grad = False
+    if vision_backbone:
+        # RQ1: same head/recipe, tower straight from its public pretrained weights (no Stage 1, no text tower).
+        assert not use_text_fusion, "--vision-backbone is for image-only configs"
+        vision_encoder, text_encoder = VisionEncoder(pretrained=True, backbone=vision_backbone).to(device), None
+    else:
+        vision_encoder, text_encoder = load_stage1_encoders(stage1_checkpoint, device)
+        for param in text_encoder.parameters():
+            param.requires_grad = False
     if config["freeze_vision_encoder"]:
         for param in vision_encoder.parameters():
             param.requires_grad = False
@@ -179,7 +193,7 @@ def main() -> int:
     loss_fn = asymmetric_loss if config.get("loss", "bce") == "asl" else multilabel_bce_loss
     patience = config.get("early_stopping_patience", 0)
     print(
-        f"Device: {device} | stage1_checkpoint: {stage1_checkpoint} | run: {run_name} | "
+        f"Device: {device} | {'vision_backbone: ' + vision_backbone if vision_backbone else 'stage1_checkpoint: ' + str(stage1_checkpoint)} | run: {run_name} | "
         f"text_fusion: {use_text_fusion} | projections: {projections} | loss: {config.get('loss', 'bce')} | "
         f"epochs: {config['epochs']} | train imgs: {len(train_loader.dataset)}"
     )
