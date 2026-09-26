@@ -142,7 +142,7 @@ All four ran serially on the single RTX 5080 (see `docs/external_repro_feasibili
 The findings in §3–§5 triggered a full rebuild — documented in [`v2_rebuild.md`](v2_rebuild.md). Two of them changed the ground truth used above:
 
 1. **The labeler had a negation-scope bug** (a leading "no" did not reach the end of coordinated lists, so *"no consolidation, effusion, or pneumothorax"* labelled pneumothorax positive). Fixing it changed study-level prevalence of Pneumothorax 10.2% → 0.8% and Pleural Effusion 19.6% → 4.9%. The Phase 5 tables above were computed against the **old** labels and are kept as the record of that comparison; the ≥10-support rows are the ones that survive the fix meaningfully, and the Pneumothorax row above should be disregarded (it was almost entirely false positives).
-2. **RadZero, re-scored against the corrected labels on the frontal test subset (no re-run, same saved predictions), moves from 0.737 → 0.868** — an independent model agreeing much more with the corrected labels is strong evidence the fix was right.
+2. **RadZero, re-scored against the corrected labels (no re-run, same saved predictions), gains about +0.09 at a fixed image set** (all 748: 0.737 → 0.824; 377 frontal: 0.780 → 0.868) — an independent model agreeing much more with the corrected labels is strong evidence the fix was right. The headline 0.737 → 0.868 additionally includes the frontal-only restriction (+0.04).
 
 Post-rebuild, on the same frontal held-out images and corrected labels, **image-only** and with no text given to any model:
 

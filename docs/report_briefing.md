@@ -120,7 +120,7 @@ MedXVLM's premise: one well-aligned image–text representation, learned with co
 | **RQ1** | *Does domain-specific contrastive initialisation matter at this scale?* Hypothesis: BiomedCLIP init beats general-domain CLIP for downstream classification (and retrieval). | **Yes, the pretraining domain matters, but the specific BiomedCLIP-over-CLIP contrast is not resolved.** The same classifier on four encoders: X-ray DINOv2 (chest-X-ray self-supervised) 0.837 ± 0.015 > BiomedCLIP 0.802 > OpenAI CLIP 0.792 > ImageNet ViT 0.784. X-ray DINOv2's lead over both general-domain encoders is significant. BiomedCLIP vs CLIP is +0.010 (CI −0.025 to +0.086): in the predicted direction, not significant with one run each. The effect is largest for localisation: pointing game 32% vs 13% for ImageNet. Retrieval was not re-tested. | §9 |
 | **RQ2** | *Does a local (patch–word) contrastive term improve grounding, not just accuracy?* Hypothesis: yes, as in GLoRIA. | **No measurable effect at this scale.** Text-grounded pointing game with vs without the local loss: 5.3% vs 3.8%. Both are *below* a random point (7.5%). Classification with vs without: 0.8645 vs 0.8648 (Phase 3, tie). The direction matches the hypothesis; the magnitude is unusable. | §11.1, §12 |
 | **RQ3** | *Can a frozen vision tower + LoRA-tuned 1.5B LLM produce coherent findings on a narrow report style?* | **Coherent: yes. Visually grounded: mostly no.** The reports are fluent and correctly formatted, and match CheXOne-3B on CE F1 (0.176 vs 0.149). But sentence attribution shows the decoder puts only 1.3% of its attention on the image and reuses one "glance" for all sentences. Its output is mostly language prior. Conditioning on the classifier's findings (v2c) removes invented findings but is capped by the classifier (ceiling 0.234). | §10, §11.2 |
-| **RQ4** | *Does explainability quality track the Stage 1 design / encoder choice, not just task accuracy?* | **Yes, and more strongly than accuracy does.** (a) Across encoders, heatmap localisation ranges 13%–32% while AUROC ranges only 0.78–0.84. (b) Across Stage 1 alignments, text-grounded localisation improves with alignment quality (5.3% → 8.7% → 11.3%) but stays far below the supervised attention maps (41%). (c) The report writer's visual grounding is weak regardless. | §9, §11 |
+| **RQ4** | *Does explainability quality track the Stage 1 design / encoder choice, not just task accuracy?* | **Yes, and more strongly than accuracy does.** (a) Across encoders, heatmap localisation ranges 13%–32% while AUROC ranges only 0.78–0.84. (b) Text-grounded localisation improves across successive alignment versions (Phase 3 5.3% → v2 8.7% → v3b 11.3%). This is not monotonic in zero-shot AUROC (Phase 3 0.669 > v2 0.565), and Phase 3 used a different encoder. It stays far below the supervised attention maps (41%). (c) The report writer's visual grounding is weak regardless. | §9, §11 |
 
 ---
 
@@ -161,7 +161,7 @@ The split is at study level (`uid`), so the two views of a study never cross spl
 | Fracture | 103 | 88 | 11 | 3,624 | 3.0% |
 | Support Devices | 98 | 0 | 2 | 3,726 | 2.6% |
 
-**Severe class imbalance:** 7 of 14 classes are under 5% prevalence. **Test-set positives among the 377 frontal test images** (important caveat for every per-class number): No Finding 268, Lung Opacity 42, Cardiomegaly 36, Atelectasis 36, Pleural Effusion 15, Edema 12, Lung Lesion 9, Pneumonia 8, Fracture 8, Support Devices 8, Consolidation 5, Pleural Other 3, **Pneumothorax 1**, Enlarged Cardiomediastinum 0. Per-class AUROCs on single-digit counts are noise.
+**Severe class imbalance:** 10 of 14 classes are under 5% training prevalence with the corrected labels. **Test-set positives among the 377 frontal test images** (important caveat for every per-class number): No Finding 268, Lung Opacity 42, Cardiomegaly 36, Atelectasis 36, Pleural Effusion 15, Edema 12, Lung Lesion 9, Pneumonia 8, Fracture 8, Support Devices 8, Consolidation 5, Pleural Other 3, **Pneumothorax 1**, Enlarged Cardiomediastinum 0. Per-class AUROCs on single-digit counts are noise.
 
 **The labeling bug and its fix (a key episode, §6).** The original labeler's negation scope was 5 tokens, and it matched cue substrings (so "no" matched inside "nodular"). In *"No focal consolidation, pleural effusion, or pneumothorax"*, the later items escaped the negation and were labeled **positive**. After the fix (a leading negation now governs the whole coordinated list until a scope-reset word, with word-boundary cue matching), study-level positive rates changed:
 
@@ -171,9 +171,9 @@ The split is at study level (`uid`), so the two views of a study never cross spl
 | Pleural Effusion | 19.6% | **4.9%** |
 | Consolidation | 2.8% | 1.0% |
 | Pneumonia | 3.8% | 2.2% |
-| No Finding | 51.0% | **69.1%** (≈ the ~2/3 normal rate published for this corpus) |
+| No Finding | 51.0% | **69.1%** |
 
-Other classes moved by less than 1 point. **Independent confirmation:** RadZero's saved predictions, unchanged, agree far better with the corrected labels (macro AUROC 0.737 → **0.868** on the same images), which shows the fix was right. One residual labeler pattern is known and was deliberately left unfixed, because relabeling this late would shift every result: *"…costophrenic blunting to suggest large pleural effusion"* (negation does not reach across "to suggest").
+Other classes moved by less than 1 point. **Independent confirmation:** RadZero's saved predictions, unchanged, agree far better with the corrected labels. At a fixed image set the label fix alone adds about +0.09 macro AUROC (all 748 test images 0.737 → 0.824; 377 frontal 0.780 → 0.868). The frequently quoted 0.737 → 0.868 also includes the frontal-only restriction (+0.04), so do not attribute all of it to the fix. (Do not cite a "published normal rate": the dataset paper reports 38% normal reports under a broader coder definition, which is not comparable to CheXpert "No Finding"; see §22.) One residual labeler pattern is known and was deliberately left unfixed, because relabeling this late would shift every result: *"…costophrenic blunting to suggest large pleural effusion"* (negation does not reach across "to suggest").
 
 ### 5.2 NIH ChestX-ray14 (external test only; never trained on)
 Official patient-disjoint test split: **25,596 images, 2,797 patients**, different hospital and scanners, NLP-mined labels from NIH's own labeler. Used for (a) external classification AUROC and (b) the heatmap validation, because it ships **984 radiologist-drawn bounding boxes on 880 test images** for 8 findings: Atelectasis 180, Cardiomegaly 146, Effusion 153, Infiltrate 123, Mass 85, Nodule 79, Pneumonia 120, Pneumothorax 98. Indiana has no box annotations, so all localisation numbers are out-of-distribution by design.
@@ -194,7 +194,7 @@ This is the narrative spine of the report. Present it as the scientific process 
    - X-ray-pretrained encoder (X-ray DINOv2, the same tower RadZero uses) instead of BiomedCLIP.
    - Asymmetric loss (ASL) for the imbalance; split learning rates (encoder 1e-5, head 1e-3); cosine schedule; early stopping.
    - "XXXX" tokens stripped from the reports.
-   - Result: **0.51 → 0.855 (seed 0)**.
+   - Result, on the same 377 frontal test images: **0.572 → 0.855 (seed 0)**. The 0.51 figure above belongs to a different set (748 all-view images, old labels): the leak itself is shown there as 0.851 with the report text vs 0.512 without (C16).
 5. **A single seed overstated it.** Four seeds gave 0.837 ± 0.015; seed 0 was the luckiest. Averaging the four models: **0.868 = RadZero**. Every headline since quotes mean ± sd or the ensemble.
 6. **The report generator had collapsed.** Phase 3 produced **5 distinct reports for 150 images**, mostly one normal boilerplate. Fix: oversample abnormal studies to 50% of training batches → 61 distinct outputs, CE F1 doubled (0.078 → 0.152). **But** it now invented support devices in 10% of frontal reports, a shortcut learned because device words are 4× more common in abnormal reports.
 7. **Decoding fixed most of the hallucination for free.** Beam search (3 beams, repetition penalty 1.2) on the same checkpoint: invented devices 10% → 3%, CE F1 0.152 → 0.176.
@@ -230,8 +230,8 @@ This is the narrative spine of the report. Present it as the scientific process 
 | Phase 3 local-on / local-off | BiomedCLIP ViT-B/16, fine-tuned | full report | 5 epochs, batch 16, LR 2e-5, all views; the RQ2 ablation pair | val R@1 (image→text) 0.0134 / 0.0174; val loss flat (did not converge) |
 | **v2** | **X-ray DINOv2 (frozen)** | full report | 15 epochs, batch 32, text LR 2e-5, projection LR 1e-3, frontal, local loss on | val loss 5.96 → 4.67 (epoch 7); val R@1 i→t 0.044, t→i 0.059 (epoch 15) |
 | v2, val-loss-selected / frozen-text | as v2 | full report | tested whether the weak zero-shot came from checkpoint choice or text drift | neither helped (§8.4) |
-| v3 | X-ray DINOv2 (fine-tuned, LR 1e-5) | **one sentence per image per epoch**; **multi-positive InfoNCE** (identical sentences count as mutual positives) | 12 epochs | val loss 3.19 → 2.94 (barely moved) |
-| **v3b** | X-ray DINOv2 (fine-tuned) | **finding sentences only**: 900 images have one; the other 2,130 normal images all get the canonical sentence "No acute cardiopulmonary abnormality." | 8 epochs (early-stopped, best 5), 17.1 min | **best zero-shot head: 0.734** |
+| v3 | X-ray DINOv2 (fine-tuned, LR 1e-5; projections 1e-3; batch 32; local loss off) | **one sentence per image per epoch**; **multi-positive InfoNCE** (identical sentences count as mutual positives) | 12 epochs | val loss 3.19 → 2.94 (barely moved) |
+| **v3b** | X-ray DINOv2 (fine-tuned, LR 1e-5; projections 1e-3; batch 32; local loss off) | **finding sentences only**: 900 images have one; the other 2,130 normal images all get the canonical sentence "No acute cardiopulmonary abnormality." | 8 epochs (early-stopped, best 5), 17.1 min | **0.734 on the 8 shared classes (best there and on all 13); Phase 3 is better on the 5 stable classes (0.708 vs 0.693)** |
 
 - **Retrieval (val split; no test-split retrieval evaluation was run).** R@1 / R@5 / R@10, image→text:
   - Phase 3 local-on: 0.013 / 0.060 / 0.092
@@ -416,7 +416,7 @@ Rows with n+ < 10 are indicative only. The Pneumothorax row rests on **one** pos
 | Pneumothorax | 2,665 | 0.634 | 0.611 |
 | **Macro, 8 mapped** | | **0.714** (seed mean 0.704 ± 0.009) | **0.719** |
 
-Context: a drop of about 0.15 from home (0.868 → 0.719) is the domain-shift cost of one outpatient site and 3,030 training images. **Reported by the authors, not reproduced here:** RadZero's paper gives 0.804 on ChestX-ray14 with its own protocol and label set. Supervised models trained *on* ChestX-ray14 typically report about 0.80–0.84 (general literature context, not measured here). Pneumothorax is weakest, consistent with only 27 positive training studies.
+Context: a drop of about 0.15 from home (0.868 → 0.719) is the domain-shift cost of one outpatient site and 3,030 training images. **Reported by the authors, not reproduced here:** RadZero's paper gives 0.804 on ChestX-ray14 with its own protocol and label set. Supervised models trained *on* ChestX-ray14 typically report about 0.80–0.84 (general literature context, not measured here). Pneumothorax is weakest, consistent with only 23 positive training studies (27 in the whole corpus).
 
 ---
 
@@ -474,7 +474,7 @@ Sources: `docs/v2_rebuild.md` §3.4, §3.6.2, §3.6.4, §3.7; `report_generation
 | System | CE macro F1 | CE micro F1 | CE macro F1, all 150 | Distinct outputs / 70 | Modal-output share | Invented devices / surgery | BLEU-4 | ROUGE-L | Mean words |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | *Ceiling: the classifier's flagged findings as a bare list* | *0.234* | *0.656* | *0.224* | *13* | *74%* | *0%* | *0.0* | *0.10* | — |
-| **v2 + beam search (best configuration; app default)** | **0.176** | **0.650** | 0.148 | 14 | 61% | **3%** | 8.7 | 0.26 | 33.1 |
+| **v2 + beam search (best of the configurations compared on test, post hoc; app default)** | **0.176** | **0.650** | 0.148 | 14 | 61% | **3%** | 8.7 | 0.26 | 33.1 |
 | v2c, findings-conditioned, greedy (official checkpoint) | 0.165 | 0.610 | **0.182** | 13 | 74% | **0%** | 9.2 | 0.29 | — |
 | v2, greedy | 0.152 | 0.575 | 0.119 | 26 | 54% | 10% | 9.8 | 0.28 | 35.4 |
 | **CheXOne, 3B (instruct mode, public weights)** | 0.149 | 0.599 | 0.107 | 36 | 26% | 0% | 10.2 | 0.29 | 28.8 |
@@ -570,9 +570,9 @@ Per finding (hit rate %): attention ensemble / Grad-CAM ensemble / text v3b / ra
 | Pneumothorax (98) | 4.1 | 1.0 | 8.2 | 5.2 | 1.0 |
 
 **Findings:**
-1. **The classifier's own attention maps localise real findings.** They hit 41% vs 7.5% random. Excluding Cardiomegaly, whose boxes cover the image centre and inflate the centre baseline to 97%, they hit 28.7% vs 8.2% centre and 5.6% random. For Atelectasis, Effusion, Infiltrate and Pneumonia they are 5–10× better than chance. This is the first validated explainability claim in the project; before this, the heatmaps had only been eyeballed.
+1. **The classifier's own attention maps localise real findings.** They hit 41% vs 7.5% random. Excluding Cardiomegaly, whose boxes cover the image centre and inflate the centre baseline to 97%, they hit 28.7% vs 8.2% centre and 5.6% random. For Atelectasis, Effusion, Infiltrate and Pneumonia they are about 4–10× better than chance. This is the first validated explainability claim in the project; before this, the heatmaps had only been eyeballed.
 2. **Ensembling improves localisation** (33.7% → 41.2%), as it improves AUROC.
-3. **Where the classifier is weak, the maps are at chance.** Pneumothorax is 4%, matching its weakest external AUROC and its 27 training positives. A heatmap cannot explain a decision the model doesn't make.
+3. **Where the classifier is weak, the maps are at chance.** Pneumothorax is 4%, matching its weakest external AUROC and its 23 training positives. A heatmap cannot explain a decision the model doesn't make.
 4. **Grad-CAM, the method the proposal specified, is worse** than the attention weights (19% vs 41%), and noisier across seeds. The attention weights *are* the decision mechanism; Grad-CAM approximates it with gradients.
 5. **Class-agnostic attention rollout is at chance** (6.4%). Generic "salient region" maps don't localise a named finding.
 6. **RQ2:** the local patch–word loss gives no measurable grounding benefit at this scale. With it 5.3%, without it 3.8%, both below a random point.
@@ -651,7 +651,7 @@ CheXzero (zero-shot, MIMIC-CXR), GLoRIA (local + global alignment), BioViL (CXR-
 | C14 | Local loss on vs off (RQ2) | boxes; Phase 3 val | 5.3% vs 3.8% pointing; 0.8645 vs 0.8648 AUROC | apples-to-apples (historical protocol for AUROC) |
 | C15 | Greedy vs beam decoding | 150 test | v2: 0.152 → 0.176, devices 10% → 3%; v2c: beam worse (0.135 vs 0.165) | apples-to-apples |
 | C16 | Phase 3 with the leak vs image-only | Phase 5 test (748, old labels) | 0.851 with ground-truth text vs 0.512 image-only | demonstrates the leak |
-| C17 | Labels before vs after fix, as judged by RadZero | 377 test | RadZero 0.737 → 0.868 against corrected labels | independent validation |
+| C17 | Labels before vs after fix, as judged by RadZero | 748 all-view / 377 frontal | label fix alone: 0.737 → 0.824 (748) and 0.780 → 0.868 (377) | independent validation |
 
 ---
 
@@ -668,7 +668,7 @@ CheXzero (zero-shot, MIMIC-CXR), GLoRIA (local + global alignment), BioViL (CXR-
 8. **Zero-shot is data-limited** (0.734 vs 0.868). Retrieval was evaluated only on the validation split.
 9. **Not all planned metrics were computed.** RadGraph F1, RadCliQ and METEOR are missing, and the ASL-vs-BCE ablation was not run.
 10. **External-model comparisons are partial.** CheXOne ran in instruct mode, not its stronger reasoning mode, and its own benchmarks weren't reproduced. The RadZero reproduction used a 1,000-image subsample and a custom label mapping.
-11. **Model selection.** Checkpoints were chosen on the validation split. The v2c epoch-3 test number is reported but labeled post hoc. No selection was ever made on test data.
+11. **Model selection.** Checkpoints were chosen on the validation split, and the v2c epoch-3 test number is labeled post hoc. **But the decoding strategy was not:** beam vs greedy was compared on the 70-image test subsample itself (§10). The pre-specified protocol was greedy decoding (v2: 0.152). Describe 0.176 as the best of the configurations compared on the test subsample (a post hoc choice).
 
 ### 15.2 Engineering challenges and how they were solved (good material for a "Challenges" section)
 - **New GPU architecture.** The RTX 5080 (Blackwell, `sm_120`) needed PyTorch builds newer than the external repositories pinned, so versions were adjusted and documented in isolated virtual environments.
@@ -875,5 +875,77 @@ Checkpoints (about 11 GB) and data are not in the repository.
 - **Domain shift:** performance drop when moving to data from a different hospital or scanner.
 
 ---
+
+---
+
+## 22. Corrections and additions (2026-09-27)
+
+These answer an audit of the briefing; the fixes are also applied in the sections above.
+
+**Decisions:**
+- **Decoding was chosen on test data.** Beam vs greedy was compared on the 70-image test subsample (the pre-specified protocol was greedy). Report v2 greedy **0.152** as the pre-specified result and v2 + beam **0.176** as "the best of four configurations compared on the test subsample (post hoc)". Also post hoc: "greedy is best for v2c". The v2c *checkpoint* (epoch 1) was selected on validation, with greedy decoding, so v2c greedy **0.165** is its pre-specified number.
+- **RadZero label check** (same saved predictions, recomputed 2026-09-27):
+
+  | | All 748 test images | 377 frontal |
+  |---|---:|---:|
+  | Old labels | 0.737 | 0.780 |
+  | Corrected labels | 0.824 | 0.868 |
+
+  The label fix alone is worth about +0.09; the frontal restriction about +0.04.
+- **Before/after:** use **0.572 → 0.855** (same 377 images; C11) for the rebuild. Show the leak as **0.851 vs 0.512** on the Phase 5 set (748 all-view images, old labels; C16).
+- **RQ4(b):** "improves across successive alignment versions", not "with alignment quality".
+- **Zero-shot "best":** v3b is best on the 8 shared (0.734) and all 13 (0.652, vs Phase 3 0.562); Phase 3 is best on the 5 stable classes (0.708 vs 0.693). Report both.
+
+**Fixes:**
+- **Head contribution:** +0.078 uses seed 0, the best of 4. The seed-mean version is 0.837 − 0.777 = +0.060, so quote "+0.06 to +0.08". The baselines are single runs.
+- **Imbalance:** 10 of 14 classes are under 5% training prevalence.
+- **Pneumothorax:** 23 positive studies in the training split (25 counting uncertain); 27 in the whole corpus.
+- **RadZero classes:** 18 prompts/classes in its vocabulary. The OpenI macro is over **17** because "Abnormal Lesion" had 0 positives in the 1,000-image subsample. Both numbers are right in context.
+- **Pointing-game multiplier:** "about 4–10× better than chance".
+- **Duplicate rows (v2b vs v2c without findings): not an error.** Both models output the identical sentence ("The heart is normal in size. The mediastinum is unremarkable. The lungs are clear. No acute disease.") for all 150 images (verified per image), so every metric matches.
+- **Normal rate:** drop the "~2/3 published" claim; it was wrong. Demner-Fushman et al. (2016) report 1,526 of 3,996 reports (38%) as normal "as judged by 2 coders", under a broader definition that counts non-CheXpert findings. Not comparable to 69.1% CheXpert "No Finding".
+- **"Shared backbone":** agreed. The final system shares one vision tower between Stage 2 and Stage 3 (Stage 3 uses the seed-0 classifier's fine-tuned X-ray DINOv2). Stage 1 is a parallel branch: v2 froze that tower, so Stage 1 passes it through unchanged, and the alignment powers only zero-shot and text-grounded maps. The proposal's premise (one contrastive alignment as the backbone for both tasks) was only partly realised.
+- **Rounding:** paired Δs are computed from unrounded AUROCs and may differ by ±0.001 from subtracting the rounded values.
+
+**Missing information:**
+- **Planned 16-week schedule** (proposal §6):
+
+  | Week | Plan |
+  |---|---|
+  | 1–2 | Skeleton, environment, toy loader, literature review, proposal |
+  | 3–4 | Data pipeline, study-level split, rule-based labeler |
+  | 5–6 | Stage 1 (BiomedCLIP init, global + local loss), retrieval/zero-shot checks |
+  | 7 | Stage 1 evaluation (RQ1/RQ2 groundwork) |
+  | 8–9 | Stage 2 (attention pooling, gated fusion) vs vision-only baseline |
+  | 10 | Grad-CAM / rollout on Stage 2; localisation checks (RQ2) |
+  | 11–12 | Stage 3 (LLaVA-style projection, Qwen2.5-1.5B + LoRA) |
+  | 13 | Stage 3 evaluation (BLEU/ROUGE + clinical checks), sentence attribution (RQ3/RQ4) |
+  | 14 | Streamlit demo |
+  | 15 | Ablations for RQ1–RQ4, error analysis |
+  | 16 | Buffer, final report, presentation |
+
+  Actual: see §3. Phases 1–3 finished by 2026-09-05. The evaluation phases (4–5) then triggered the v2 rebuild. Grad-CAM/rollout (planned week 10) and the RQ ablations (week 15) happened last (2026-09-21 and 09-26).
+- **v3 / v3b hyperparameters:** both use batch 32, encoder LR 1e-5 (vision and text both fine-tuned), projection/temperature LR 1e-3, weight decay 0.01, max text length 64, frontal images only, **local loss off**, selection by validation loss, early-stopping patience 3, up to 12 epochs.
+  - v3: all sentences, multi-positive InfoNCE; best epoch 10.
+  - v3b: finding sentences + canonical normal sentence; best epoch 5 of 8.
+- **v2c:** up to 5 epochs, early-stopping patience 2 on the generation criterion. It ran 3 epochs (epoch 1 at batch 4 × accumulation 4; epochs 2–3 at batch 2 × 8; effective batch 16 throughout); best epoch 1. It **kept 50% abnormal oversampling**. Findings dropout 0.1; LR 2e-4. Generation-based selection used 48 validation images with max 96 new tokens.
+- **The 310 NIH images for sentence attribution:** stratified random sample of **40 boxes per finding** × 8 findings = 320 boxes (pandas `sample`, `random_state=0`). Some images carry several boxes, which leaves 310 unique images.
+- **Classes with F1-optimal thresholds** (≥10 frontal validation positives, with count): No Finding (258), Lung Opacity (51), Cardiomegaly (39), Atelectasis (37), Edema (21), Pleural Effusion (15), Lung Lesion (14), Support Devices (11). The other six (Enlarged Cardiomediastinum 1, Pneumothorax 3, Pleural Other 4, Consolidation 8, Pneumonia 8, Fracture 9) use the median threshold 0.538.
+- **Licences:**
+
+  | Resource | Licence / terms | Source |
+  |---|---|---|
+  | Indiana University / Open-i collection (Kaggle mirror `raddar/chest-xrays-indiana-university`) | **CC BY-NC-ND 4.0**; cite the original Open-i source | Hugging Face mirror card [verify on the Kaggle page] |
+  | NIH ChestX-ray14 | "The usage of the data set is unrestricted. But you should provide the link to our original download site, acknowledge the NIH Clinical Center and provide a citation to our CVPR 2017 paper." | NIH FAQ file shipped with the dataset |
+  | X-ray DINOv2 (`StanfordAIMI/dinov2-base-xray-224`) | Apache-2.0 | project docs |
+  | RadZero weights | CC BY-NC 4.0 | project docs |
+  | CheXOne | Apache 2.0 framework; model/data follow original sources | project docs |
+  | Qwen2.5-1.5B-Instruct, BiomedCLIP, BiomedBERT, OpenAI CLIP, timm ViT | [verify on each model card] | — |
+
+**Reference entries** (checked 2026-09-27):
+- **CheXOne:** Y. Zhang, C. Wang, Y. Gao, J. Liu, M. Varma, J. Xu, S. Ostmeier, J. Long, S. Gatidis, S. Dehkharghani, A. Michalson, E. K. Hong, C. Bluethgen, H. H. Guo, A. V. Ortiz, S. Altmayer, S. Bodapati, J. D. Janizek, K. Chang, J.-B. Delbrouck, A. S. Chaudhari, C. P. Langlotz, "A Reasoning-Enabled Vision-Language Foundation Model for Chest X-ray Interpretation," arXiv:2604.00493, Apr. 2026.
+- **CheXpert Plus:** P. Chambon, J.-B. Delbrouck, T. Sounack, S.-C. Huang, Z. Chen, M. Varma, S. Q. H. Truong, C. T. Chuong, C. P. Langlotz, "CheXpert Plus: Augmenting a Large Chest X-ray Dataset with Text Radiology Reports, Patient Demographics and Additional Image Formats," arXiv:2405.19538, 2024.
+- **MIMIC-CXR:** A. E. W. Johnson, T. J. Pollard, S. J. Berkowitz, N. R. Greenbaum, M. P. Lungren, C.-y. Deng, R. G. Mark, S. Horng, "MIMIC-CXR, a de-identified publicly available database of chest radiographs with free-text reports," *Scientific Data*, vol. 6, 317, 2019. [verify]
+- **Indiana dataset paper:** D. Demner-Fushman, M. D. Kohli, M. B. Rosenman, S. E. Shooshan, L. Rodriguez, S. Antani, et al., "Preparing a collection of radiology examinations for distribution and retrieval," *JAMIA*, vol. 23, no. 2, pp. 304–310, 2016.
 
 *End of briefing. If anything the report needs is missing here, ask Kartik rather than filling the gap: the underlying files are listed in each section's "Source" line.*
