@@ -20,7 +20,9 @@ from common import (
     image_key,
     load_model_card,
     load_test_images,
+    load_operating_points,
     load_thresholds,
+    percentile_vs_negatives,
     pct,
     true_label,
 )
@@ -28,6 +30,7 @@ from medxvlm.inference import REPORT_CHECKPOINTS
 
 card = load_model_card()
 thresholds = load_thresholds()
+operating_points = load_operating_points()
 test_images = load_test_images()
 grounding = card.get("grounding", {})
 
@@ -105,7 +108,7 @@ image: Image.Image | None = None
 key: str | None = None
 row: pd.Series | None = None
 
-left, right = st.columns([9, 15], gap="medium")
+left, right = st.columns([8, 16], gap="medium")
 
 with left, st.container(border=True):
     st.subheader("X-ray")
@@ -157,42 +160,87 @@ with right, st.container(border=True, height="stretch"):
 
     probs = classify(key, pipeline, image)
     ranked = sorted(probs, key=probs.get, reverse=True)
-    flagged = [l for l in ranked if l != "No Finding" and l in thresholds and probs[l] >= thresholds[l]["threshold"]]
+
+    op = operating_points.get("per_class", {})
+    summary = operating_points.get("test_summary", {})
+    modes = {"balanced": "Balanced", "sensitive": "Sensitive"}
+    mode_help = "How readily a finding is flagged. Both thresholds were chosen on the validation split."
+    if summary:
+        b, sv = summary["balanced"], summary["sensitive"]
+        mode_help += (
+            f"  \n**Balanced** (maximises F1): on the {b['abnormal_images']} abnormal test X-rays it flags nothing on "
+            f"{b['abnormal_images_with_no_flag']}, and it falsely flags {b['normal_images_flagged']} of {b['normal_images']} normal ones."
+            f"  \n**Sensitive** (catches ~80% of each finding in validation): nothing flagged on {sv['abnormal_images_with_no_flag']} "
+            f"abnormal X-rays, but {sv['normal_images_flagged']} of {sv['normal_images']} normal X-rays get a false alarm."
+        )
+    mode = st.segmented_control("Operating point", list(modes), format_func=modes.get, default="balanced",
+                                required=True, key="operating_point", help=mode_help)
+
+    def threshold(label: str) -> float | None:
+        if label in op:
+            return op[label]["thresholds"][mode]
+        return thresholds[label]["threshold"] if label in thresholds else None
+
+    flagged = [l for l in ranked if l != "No Finding" and threshold(l) is not None and probs[l] >= threshold(l)]
+
+    def model_call(label: str) -> str:
+        t = threshold(label)
+        if t is None:
+            return "—"
+        if label == "No Finding":  # only claim "no finding" when nothing else is flagged
+            return "positive" if probs[label] >= t and not flagged else "negative"
+        return "positive" if probs[label] >= t else "negative"
 
     with st.container(horizontal=True, gap="large"):
         _field("Model flags", ", ".join(f"{l} ({probs[l]:.0%})" for l in flagged) or "Nothing above threshold")
         if row is not None:
-            _field("Radiologist", ", ".join(_positives(row)) or "Normal")
+            _field("Report label (automatic)", ", ".join(_positives(row)) or "Normal")
 
     table = pd.DataFrame({
         "Finding": LABELS,
         "Probability": [probs[l] * 100 for l in LABELS],
-        "Threshold": [thresholds[l]["threshold"] * 100 if l in thresholds else None for l in LABELS],
-        "Model": ["positive" if l in thresholds and probs[l] >= thresholds[l]["threshold"] else "—" for l in LABELS],
+        "Percentile": [percentile_vs_negatives(probs[l], op[l]["val_negative_percentiles"]) if l in op else None for l in LABELS],
+        "Threshold": [threshold(l) * 100 if threshold(l) is not None else None for l in LABELS],
+        "Model": [model_call(l) for l in LABELS],
     })
     if row is not None:
-        table["Radiologist"] = [true_label(row[l]) for l in LABELS]
+        table["Report label"] = [true_label(row[l], l) for l in LABELS]
     table = table.sort_values("Probability", ascending=False)
     st.dataframe(
         table, hide_index=True, height="content",
         column_config={
-            "Finding": st.column_config.TextColumn("Finding", width=200),
+            "Finding": st.column_config.TextColumn("Finding", width=180),
             "Probability": st.column_config.ProgressColumn(
-                "Probability", min_value=0, max_value=100, format="%.0f%%", width=140, color=ACCENT,
+                "Probability", min_value=0, max_value=100, format="%.0f%%", width=120, color=ACCENT,
+            ),
+            "Percentile": st.column_config.NumberColumn(
+                "Percentile", format="%d", width=80,
+                help="How unusual this probability is: 90 means higher than 90% of validation X-rays that do not have "
+                     "this finding. Useful for rare findings, whose probabilities stay low even when present.",
             ),
             "Threshold": st.column_config.NumberColumn(
-                "Threshold", format="%.0f%%", width=85,
-                help="Operating point chosen on the validation split to maximise F1. Classes with fewer than 10 "
-                     "validation positives use the median threshold instead.",
+                "Threshold", format="%.0f%%", width=78,
+                help="The cut-off for the selected operating point, chosen on the validation split.",
             ),
-            "Model": st.column_config.TextColumn("Model", width=80, help="Positive when the probability reaches the threshold."),
-            "Radiologist": st.column_config.TextColumn("Radiologist", width=90, help="Label extracted from the radiologist's report."),
+            "Model": st.column_config.TextColumn(
+                "Model", width=72,
+                help="Positive at or above the threshold, negative below it. No Finding is positive only when nothing else is flagged.",
+            ),
+            "Report label": st.column_config.TextColumn(
+                "Report label", width=104,
+                help="Extracted automatically from the radiologist's report by the project's rule-based labeler, which "
+                     "can be wrong. 'stated absent' = the report rules it out; 'not mentioned' is scored as negative.",
+            ),
         },
     )
-    support = card.get("per_class_support", {})
-    thin = [f"{l} ({support[l]})" for l in LABELS if l in support and support[l] < 10]
-    if thin:
-        st.caption("Fewer than 10 positive test cases, so their validated scores are not meaningful: " + ", ".join(thin) + ".")
+    untuned = [l for l in LABELS if l in op and not op[l]["validated"]]
+    notes = []
+    if untuned:
+        notes.append("Thresholds could not be tuned for " + ", ".join(untuned)
+                     + " (fewer than 10 validation examples), so their yes/no calls are unreliable: use the percentile instead.")
+    notes.append("Report labels come from an automatic reading of the report and are occasionally wrong "
+                 "(e.g. a knee-joint effusion in a combined chest-and-knee report read as pleural effusion).")
+    st.caption(" ".join(notes))
 
 # ---------------------------------------------------------------- explainability
 with st.container(border=True):

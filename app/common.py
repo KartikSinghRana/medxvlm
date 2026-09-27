@@ -87,6 +87,21 @@ def load_thresholds() -> dict:
             for label in data["thresholds"]}
 
 
+@st.cache_data
+def load_operating_points() -> dict:
+    """Balanced (F1-optimal) and sensitive (~80% validation sensitivity) thresholds per finding, plus the
+    validation reference distribution used for percentiles (scripts/compute_operating_points.py)."""
+    path = ARTIFACTS / "stage2_operating_points.json"
+    return json.load(open(path)) if path.exists() else {}
+
+
+def percentile_vs_negatives(prob: float, reference: list[float]) -> int:
+    """Where `prob` sits among validation X-rays without the finding (0-100)."""
+    import bisect
+
+    return max(0, min(100, bisect.bisect_right(reference, prob) - 1))
+
+
 def _load(name: str) -> dict | None:
     path = ARTIFACTS / name
     return json.load(open(path)) if path.exists() else None
@@ -173,11 +188,15 @@ def load_model_card() -> dict:
     return card
 
 
-def true_label(value) -> str:
-    """Raw labeler value -> display string (1 positive, 0 negative, -1 uncertain, NaN not mentioned)."""
+def true_label(value, label: str | None = None) -> str:
+    """Raw labeler value -> display string. 0 means the report explicitly rules the finding out;
+    NaN means the report never mentions it (scored as negative, like CheXpert's U-Ones policy).
+    "No Finding" is derived (1 = the report lists no finding), so it is shown as plain positive/negative."""
+    if label == "No Finding" and not pd.isna(value):
+        return "positive" if float(value) == 1.0 else "negative"
     if pd.isna(value):
-        return "—"
-    return {1.0: "positive", 0.0: "negative", -1.0: "uncertain"}[float(value)]
+        return "not mentioned"
+    return {1.0: "positive", 0.0: "stated absent", -1.0: "uncertain"}[float(value)]
 
 
 def pct(value: float | None, digits: int = 0) -> str:

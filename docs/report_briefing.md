@@ -948,4 +948,10 @@ These answer an audit of the briefing; the fixes are also applied in the section
 - **MIMIC-CXR:** A. E. W. Johnson, T. J. Pollard, S. J. Berkowitz, N. R. Greenbaum, M. P. Lungren, C.-y. Deng, R. G. Mark, S. Horng, "MIMIC-CXR, a de-identified publicly available database of chest radiographs with free-text reports," *Scientific Data*, vol. 6, 317, 2019. [verify]
 - **Indiana dataset paper:** D. Demner-Fushman, M. D. Kohli, M. B. Rosenman, S. E. Shooshan, L. Rodriguez, S. Antani, et al., "Preparing a collection of radiology examinations for distribution and retrieval," *JAMIA*, vol. 23, no. 2, pp. 304–310, 2016.
 
+**Operating points and the "No Finding" pattern (added 2026-09-27; `v2_rebuild.md` §3.10):**
+- At the balanced (F1) thresholds, the ensemble flags **nothing on 48/109 abnormal test images (44%)**, and falsely flags 29/268 normal images. A sensitive operating point (≥80% validation sensitivity per finding) gives 18/109 missed and 93/268 false alarms.
+- **Cause:** good ranking but low absolute probabilities (class imbalance), plus conservative F1 thresholds. Six rare findings can't be tuned (<10 validation positives) and are never flagged.
+- **Report it as a limitation of the operating point, not of AUROC.**
+- **Labeler error example:** in a combined chest + knee report, a knee-joint effusion was read as pleural effusion. Reports covering another body part: 7/3,826 (0.2%). Up to 24/188 effusion-positive reports lack "pleural"/"costophrenic".
+
 *End of briefing. If anything the report needs is missing here, ask Kartik rather than filling the gap: the underlying files are listed in each section's "Source" line.*

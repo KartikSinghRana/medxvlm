@@ -74,9 +74,17 @@ def check_test_image_path(at: AppTest) -> None:
     for section in ("Findings", "Where the model looked", "Findings report"):
         assert section in subheaders, f"section {section!r} missing: {subheaders}"
     assert at.dataframe, "findings table missing"
-    assert "Model flags" in _captions(at) and "Radiologist" in _captions(at), "findings summary missing"
+    assert "Model flags" in _captions(at) and "Report label (automatic)" in _captions(at), "findings summary missing"
+    table = at.dataframe[0].value
+    assert set(table["Model"]) <= {"positive", "negative"}, f"model calls should be positive/negative: {set(table['Model'])}"
+    assert "Percentile" in table.columns and "Report label" in table.columns, f"columns: {list(table.columns)}"
+    n_bal = int((table["Model"] == "positive").sum())
+    at.segmented_control(key="operating_point").set_value("sensitive").run(timeout=120)
+    _fail_on_exception(at, "sensitive operating point")
+    n_sens = int((at.dataframe[0].value["Model"] == "positive").sum())
+    at.segmented_control(key="operating_point").set_value("balanced").run(timeout=120)
     labels = at.multiselect[0].value
-    print(f"[PASS] test-image path: findings summary + table, {len(labels)} default heatmap findings")
+    print(f"[PASS] test-image path: summary + table; positives balanced {n_bal} -> sensitive {n_sens}; {len(labels)} default heatmap findings")
 
 
 def check_heatmap_methods(at: AppTest) -> None:

@@ -338,6 +338,27 @@ Per finding (seed 0; test positives in brackets — single-digit counts are nois
 
 **Net for RQ1:** yes, the encoder's pretraining domain matters — modestly for in-distribution accuracy, clearly for generalisation to another hospital, and most of all for whether the heatmaps point at the right place. The specific BiomedCLIP-over-CLIP advantage the proposal hypothesised is in the predicted direction but too small to confirm with one run each on 377 test images; the encoder the project actually uses (X-ray DINOv2, self-supervised on chest X-rays) is the best of the four on every measure.
 
+### 3.10 Operating points: why the demo often says "No Finding" (2026-09-27)
+
+Prompted by the demo: on many abnormal test X-rays the classifier flagged nothing. Measured on the 377 frontal test images with the 4-model ensemble (`scripts/compute_operating_points.py` → `stage2_operating_points.json`; thresholds and reference distributions from the **validation** split only; test numbers are for reporting, never for selection):
+
+- At the F1-optimal ("balanced") thresholds the ensemble flags **nothing on 48 of 109 abnormal images** (44%) and falsely flags 29 of 268 normal ones. Median "No Finding" probability is 0.57 on abnormal images vs 0.85 on normal ones.
+- The ranking is good (AUROC 0.79–0.95 on the main findings, §3.8) but the absolute probabilities are low: 69% of training studies are normal and each finding has 1–13% prevalence, so F1-optimal thresholds are conservative. Findings with fewer than 10 validation positives (Enlarged Cardiomediastinum, Consolidation, Pneumonia, Pneumothorax, Pleural Other, Fracture) cannot be tuned and are never flagged at the median fallback (test sensitivity 0%).
+- A **"sensitive" operating point** (highest threshold that catches ≥80% of validation positives) flags nothing on **18 of 109** abnormal images, at the cost of false alarms on **93 of 268** normal ones. Per finding (threshold / test sensitivity / test specificity):
+
+| Finding | Val + | Test + | Balanced | Sensitive |
+|---|---:|---:|---|---|
+| Cardiomegaly | 39 | 36 | 0.60 / 58% / 98% | 0.44 / 81% / 92% |
+| Lung Opacity | 51 | 42 | 0.57 / 57% / 93% | 0.44 / 81% / 79% |
+| Atelectasis | 37 | 36 | 0.51 / 56% / 89% | 0.44 / 69% / 81% |
+| Pleural Effusion | 15 | 15 | 0.55 / 47% / 96% | 0.46 / 53% / 94% |
+| Edema | 21 | 12 | 0.53 / 25% / 98% | 0.36 / 75% / 92% |
+| Lung Lesion | 14 | 9 | 0.49 / 0% / 98% | 0.38 / 56% / 74% |
+| Support Devices | 11 | 8 | 0.42 / 50% / 98% | 0.27 / 100% / 81% |
+
+- **A labeler error surfaced in the same review.** Study `3966_IM-2028-1001` is labelled Pleural Effusion = 1, but its report covers a chest *and both knees*; the chest section reads "no … pleural effusion … No acute cardiopulmonary finding" and the positive comes from a **knee-joint** effusion ("limits evaluation for an effusion"). The model's "No Finding" (0.86) is correct there. Reports covering another body part are rare (7 of 3,826 studies, 0.2%; 3 test images), but up to 24 of the 188 effusion-positive reports never mention "pleural" or "costophrenic", so some effusion labels are softer than they appear. Not relabelled (it would shift every result); recorded as a known limitation.
+- The demo now offers both operating points, shows model calls as positive/negative (No Finding positive only when nothing else is flagged), shows each probability's percentile among validation X-rays without that finding, and labels the comparison column "Report label (automatic)" rather than "Radiologist".
+
 ## 4. What this does and doesn't change about the project's story
 
 - **The headline classification number is now real.** 0.855/0.862 macro AUROC, blind, on held-out data, against corrected labels, within ~1 point of a published state-of-the-art zero-shot system on the same images. This replaces the 0.865 text-fusion figure, which should no longer be quoted as classification accuracy.
