@@ -156,7 +156,7 @@ Housekeeping note: the 45 GB download filled the host drive (see `status_report.
 
 ### 3.6 Overnight run, 2026-09-20 — seed ensemble, decoding sweep, and a second zero-shot attempt
 
-All jobs serialized (`scripts/run_overnight_2026-09-20.sh`, `run_v2b_then_score.sh`, `run_v3b_after_v2b.sh`); every exit code is in `runs/overnight_2026-09-20*.log`, `runs/v2b_chain.log`, `runs/v3b_chain.log`.
+All jobs serialized (`scripts/archive/run_overnight_2026-09-20.sh`, `scripts/archive/run_v2b_then_score.sh`, `scripts/archive/run_v3b_after_v2b.sh`); every exit code is in `runs/overnight_2026-09-20*.log`, `runs/v2b_chain.log`, `runs/v3b_chain.log`.
 
 **3.6.1 Seed variance and ensemble — a correction to the headline.** The v2 Stage 2 recipe (`classifier_v2.yaml`, unchanged) was retrained with seeds 1–3 (`--seed`, ~30–39 min each). Held-out frontal test split, image-only (`docs/phase5_artifacts/v2/classifier_seed_ensemble.json`):
 
@@ -372,7 +372,7 @@ Prompted by the demo: on many abnormal test X-rays the classifier flagged nothin
 ## 5. Files
 
 - Code: `src/medxvlm/data/labeler.py` (negation scope), `src/medxvlm/models/vision_encoder.py` (backbone option), `src/medxvlm/data/dataset.py` (projection filter), `src/medxvlm/models/baseline_classifier.py`, `src/medxvlm/engine/loop_utils.py` (`load_vision_encoder`), `scripts/train_{align,classifier,baseline,report}.py`, `scripts/prepare_data.py`, `scripts/validate_labeler.py`, `scripts/run_v2_rebuild.sh`, `scripts/eval_v2_classification.py`, `scripts/eval_v2_report_generation.py`, `scripts/eval_v2_score_reports.py`, `scripts/eval_external_chestxray14.py`.
-- §3.8–3.9: `scripts/eval_bootstrap_classification.py`, `scripts/eval_rq1_backbones.py`, `scripts/run_rq1_backbones.sh`, `scripts/run_rq1_eval_after_training.sh`, `runs/rq1_backbones.log`, `runs/rq1_eval.log`, `checkpoints/classifier_v2/rq1_*_s0/`; results `classification_bootstrap.json`, `rq1_backbones_summary.json`, `rq1_backbones_test_predictions.csv`.
+- §3.8–3.9: `scripts/eval_bootstrap_classification.py`, `scripts/eval_rq1_backbones.py`, `scripts/run_rq1_backbones.sh`, `scripts/archive/run_rq1_eval_after_training.sh`, `runs/rq1_backbones.log`, `runs/rq1_eval.log`, `checkpoints/classifier_v2/rq1_*_s0/`; results `classification_bootstrap.json`, `rq1_backbones_summary.json`, `rq1_backbones_test_predictions.csv`.
 - Configs: `configs/{align,classifier,baseline,report_gen}_v2.yaml`, `report_gen_v2b.yaml`, `report_gen_v2c.yaml`, `align_v3_sentence.yaml`, `align_v3b_findings.yaml`.
 - v2c (§3.7): `src/medxvlm/data/findings_prompt.py`, `scripts/cache_stage2_predictions.py`, `scripts/run_v2c_{findings_conditioned,resume,eval_only}.sh`, `runs/v2c_chain.log`, `runs/v2c_resume_chain.log`, `checkpoints/report_gen_v2c/{best,epoch3}.pt`; results `stage2_ensemble_{predictions.csv,thresholds.json}`, `classifier_verbalised_generations.csv`, `medxvlm_stage3_v2c{,_beam3,_nofindings_beam3,_epoch3,_epoch3_beam3}_generations.csv`, `report_generation_scores_v2c.json`, `v2c_full_val_selection.json`, `report_ce_f1_bootstrap.json`.
 - Data: `data/processed/manifest.csv` (corrected); `data/processed/manifest_v1_phase3_labels.csv` (the Phase 3 labels, kept for reproducibility).

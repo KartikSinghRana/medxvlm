@@ -5,11 +5,11 @@
 #   3. relaunch Stage 3 v2b training alone (GPU, ~4.5 h)
 echo "HISTORICAL (2026-09-20): this chain auto-launched a 4.5 h training run after an eval step."
 echo "That is no longer allowed here -- training needs an explicit go-ahead (docs/project_status_report.md §3)."
-echo "Kept for the record only. Use scripts/run_nih_eval_only.sh for the eval step."
+echo "Kept for the record only. Use scripts/archive/run_nih_eval_only.sh for the eval step."
 exit 1
 
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 export PYTHONPATH=src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 log() { echo "[$(date '+%H:%M:%S')] $*"; }

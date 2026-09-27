@@ -3,7 +3,7 @@
 # (the two "CUDA driver error: device not ready" failures on 2026-09-20 both had
 # it set; the 30-batch smoke without it passed). Then its generation + scoring.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 unset PYTORCH_CUDA_ALLOC_CONF
 export PYTHONPATH=src

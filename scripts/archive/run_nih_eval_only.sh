@@ -3,7 +3,7 @@
 # eval (~15 min GPU). Deliberately does NOT start any training -- Kartik wants
 # to be asked before multi-hour GPU jobs (memory: feedback-ask-before-gpu-training).
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 export PYTHONPATH=src
 log() { echo "[$(date '+%H:%M:%S')] $*"; }

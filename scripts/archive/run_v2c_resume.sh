@@ -3,7 +3,7 @@
 # continue training from checkpoints/report_gen_v2c/last.pt (epochs 2..5), then
 # run the inference + scoring steps. Launch only with the owner's go-ahead.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 export PYTHONPATH=src
 unset PYTORCH_CUDA_ALLOC_CONF
@@ -14,5 +14,5 @@ log "resuming v2c training from last.pt"
 python scripts/train_report.py --config configs/report_gen_v2c.yaml --resume checkpoints/report_gen_v2c/last.pt --batch-size 2 --grad-accum-steps 8; rc=$?
 log "training exit=$rc"
 [ $rc -ne 0 ] && { log "CHAIN DONE (training failed)"; exit $rc; }
-bash scripts/run_v2c_eval_only.sh checkpoints/report_gen_v2c/best.pt
+bash scripts/archive/run_v2c_eval_only.sh checkpoints/report_gen_v2c/best.pt
 log "CHAIN DONE"

@@ -47,7 +47,7 @@ MedXVLM is a three-stage chest X-ray vision-language pipeline (contrastive align
 ```
 
 `src/medxvlm/` modules: `data/{dataset,labeler,toy_dataset}.py`, `engine/{loop_utils,sanity_trainer}.py`, `eval/metrics.py`, `explain/{attention_maps,saliency,sentence_attribution}.py`, `inference.py`, `models/{alignment,baseline_classifier,classifier_head,labels,report_generator,text_encoder,vision_encoder}.py`.
-`scripts/`: `download_dataset.py, prepare_data.py, validate_labeler.py, sanity_check_data.py, sanity_check_models.py, verify_env.py, train_baseline.py, train_align.py, train_classifier.py, train_report.py, run_phase3_training.sh, run_v2_rebuild.sh, eval_phase5_classification.py, eval_phase5_report_generation.py, eval_phase5_score_reports.py, eval_v2_classification.py`.
+`scripts/`: `download_dataset.py, prepare_data.py, validate_labeler.py, sanity_check_data.py, sanity_check_models.py, verify_env.py, train_baseline.py, train_align.py, train_classifier.py, train_report.py, scripts/archive/run_phase3_training.sh, run_v2_rebuild.sh, eval_phase5_classification.py, eval_phase5_report_generation.py, eval_phase5_score_reports.py, eval_v2_classification.py`.
 
 Outside the repo root, `/home/kartik/DNN Project 2/external_repro/` holds the RadZero and CheXOne clones, two isolated venvs, and their run scripts/outputs (referenced in §9).
 

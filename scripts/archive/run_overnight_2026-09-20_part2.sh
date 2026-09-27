@@ -4,7 +4,7 @@
 # released by smoke tests). Re-run it after the main chain finishes, then
 # its dependent evals. Still one heavy job at a time.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 export PYTHONPATH=src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }

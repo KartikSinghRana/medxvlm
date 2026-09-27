@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Steps 2-3 of run_v2c_findings_conditioned.sh only (inference + scoring, no training).
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 export PYTHONPATH=src
 unset PYTORCH_CUDA_ALLOC_CONF

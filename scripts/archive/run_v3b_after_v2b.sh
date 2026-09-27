@@ -2,7 +2,7 @@
 # After the v2b chain: Stage 1 v3b (finding sentences only, ~25 min) + the
 # zero-shot table. No PYTORCH_CUDA_ALLOC_CONF (see run_v2b_then_score.sh).
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 unset PYTORCH_CUDA_ALLOC_CONF
 export PYTHONPATH=src

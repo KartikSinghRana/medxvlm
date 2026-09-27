@@ -8,7 +8,7 @@
 #   4. Evals: classifier ensemble (home + NIH), zero-shot variants, v2b
 #      generation + decoding sweep, report scoring                          ~0.6 h
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 source /home/kartik/miniconda3/etc/profile.d/conda.sh && conda activate ml
 export PYTHONPATH=src PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }

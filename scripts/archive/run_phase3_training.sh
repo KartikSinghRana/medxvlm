@@ -3,7 +3,7 @@
 # Assumes train_baseline.py is already running separately; waits for it,
 # then runs: align(on) -> align(off) -> classifier(on) -> classifier(off) -> report(on).
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 BASELINE_PID="${1:?usage: run_phase3_training.sh <baseline_pid>}"
 
