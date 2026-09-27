@@ -14,6 +14,7 @@ models were validated with (CLAHE -> resize -> ImageNet normalisation).
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -141,6 +142,12 @@ class MedXVLMPipeline:
         self.classifier_meta = dict(self.classifier_meta, n_models=len(present), skipped=[str(p) for p in paths if p not in present])
         self.report_generator: ReportGenerator | None = None
         self.report_meta: dict = {}
+        # Hosting safeguards: one decoder call at a time (the GPU is shared by every visitor), and an optional
+        # idle timeout that frees the ~7 GB report model (and the Stage 1 grounder) when nobody has used them
+        # for a while -- so a publicly hosted demo does not sit on VRAM the owner needs for other work.
+        self._gpu_lock = threading.RLock()
+        self._idle_timer: threading.Timer | None = None
+        self.idle_unload_seconds: float | None = None
         self.text_grounder: saliency.TextGrounder | None = None
         self.text_grounding_checkpoint = DEFAULT_TEXT_GROUNDING_CHECKPOINT
         if load_report_generator:
@@ -170,6 +177,11 @@ class MedXVLMPipeline:
         """Load Stage 3 lazily -- the 1.5B decoder is the expensive part (~7 GB VRAM in fp32).
 
         Passing a different `checkpoint` swaps the generator (one decoder is kept in memory at a time)."""
+        with self._gpu_lock:
+            self._load_report_generator(checkpoint)
+        self._touch()
+
+    def _load_report_generator(self, checkpoint: str | Path | None) -> None:
         if checkpoint is not None and Path(checkpoint) != self.report_checkpoint:
             self.unload_report_generator()
             self.report_checkpoint = Path(checkpoint)
@@ -205,10 +217,26 @@ class MedXVLMPipeline:
             self._findings_thresholds = json.load(open(FINDINGS_THRESHOLDS_PATH))["thresholds"]
 
     def unload_report_generator(self) -> None:
-        self.report_generator = None
-        self.report_meta = {}
-        if self.device.type == "cuda":
-            torch.cuda.empty_cache()
+        with self._gpu_lock:
+            self.report_generator = None
+            self.report_meta = {}
+            if self.device.type == "cuda":
+                torch.cuda.empty_cache()
+
+    def _touch(self) -> None:
+        """Restart the idle countdown after any use of the lazily loaded models."""
+        if not self.idle_unload_seconds:
+            return
+        if self._idle_timer is not None:
+            self._idle_timer.cancel()
+        self._idle_timer = threading.Timer(self.idle_unload_seconds, self._unload_idle_models)
+        self._idle_timer.daemon = True
+        self._idle_timer.start()
+
+    def _unload_idle_models(self) -> None:
+        with self._gpu_lock:
+            self.text_grounder = None
+            self.unload_report_generator()
 
     def load_text_grounder(self) -> saliency.TextGrounder:
         """Lazily load the Stage 1 alignment used for prompt -> patch similarity maps (~1 GB VRAM)."""
@@ -284,6 +312,12 @@ class MedXVLMPipeline:
 
     @torch.no_grad()
     def attribute_report(self, image: Image.Image, text: str, instruction: str | None = None, style: str = "classic") -> list[SentenceExplanation]:
+        with self._gpu_lock:
+            result = self._attribute_report(image, text, instruction, style)
+        self._touch()
+        return result
+
+    def _attribute_report(self, image: Image.Image, text: str, instruction: str | None, style: str) -> list[SentenceExplanation]:
         """Per-sentence visual attention of the generator for an already generated `text` (one extra decoder pass)."""
         if self.report_generator is None:
             self.load_report_generator()
@@ -298,6 +332,12 @@ class MedXVLMPipeline:
 
     @torch.no_grad()
     def generate_report(self, image: Image.Image, max_new_tokens: int = 128, decoding: dict | None = None) -> ReportResult:
+        with self._gpu_lock:
+            result = self._generate_report(image, max_new_tokens, decoding)
+        self._touch()
+        return result
+
+    def _generate_report(self, image: Image.Image, max_new_tokens: int, decoding: dict | None) -> ReportResult:
         if self.report_generator is None:
             self.load_report_generator()
         assert self.report_generator is not None, "no report checkpoint configured"

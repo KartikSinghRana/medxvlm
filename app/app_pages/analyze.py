@@ -94,6 +94,11 @@ with st.sidebar:
         "Trained on about 3,000 outpatient X-rays from one hospital. Outputs demonstrate the pipeline and "
         "must not be used for clinical decisions."
     )
+    st.caption(
+        "Test-set X-rays: Indiana University Chest X-ray Collection (Open-i, U.S. National Library of Medicine), "
+        "CC BY-NC-ND 4.0; shown for non-commercial research demonstration. Uploaded images are processed in memory "
+        "and not stored."
+    )
 
 # ---------------------------------------------------------------- input + findings
 image: Image.Image | None = None

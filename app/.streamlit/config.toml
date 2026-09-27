@@ -4,6 +4,7 @@
 
 [server]
 enableStaticServing = true      # serves app/static/ (the logo)
+maxUploadSize = 10              # MB; chest X-ray PNG/JPGs are well under this (public hosting)
 
 [client]
 toolbarMode = "minimal"

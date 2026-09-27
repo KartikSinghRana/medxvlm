@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -39,7 +40,11 @@ DEVICE_RE = re.compile(r"catheter|picc|\btube|\bline\b|clip|wire|pacemaker|lobec
 # ---------------------------------------------------------------- models
 @st.cache_resource(show_spinner="Loading the 4-model classifier ensemble…")
 def get_pipeline() -> MedXVLMPipeline:
-    return MedXVLMPipeline()
+    pipeline = MedXVLMPipeline()
+    # When hosted (scripts/hosting.sh sets this), free the report model after N idle seconds.
+    idle = float(os.environ.get("MEDXVLM_IDLE_UNLOAD_SECONDS", "0") or 0)
+    pipeline.idle_unload_seconds = idle or None
+    return pipeline
 
 
 def image_key(data: bytes) -> str:

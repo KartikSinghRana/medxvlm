@@ -163,6 +163,25 @@ PYTHONPATH=src streamlit run app/app.py
 - Headless functional check (no browser needed; 7 user paths):
   `PYTHONPATH=src python scripts/sanity_check_app.py [--no-generator]`.
 
+### Hosting it publicly from this PC (free, uses the local GPU)
+
+`scripts/hosting.sh` runs the app as a systemd user service bound to `127.0.0.1:8501` and exposes it through an
+ngrok tunnel (a public HTTPS address; free ngrok accounts get a fixed `*.ngrok-free.dev` domain). Both services
+restart automatically if they crash, and start with WSL once installed.
+
+```bash
+scripts/hosting.sh install   # one-time: create + enable both services (start with WSL)
+scripts/hosting.sh start     # go live; prints the public URL
+scripts/hosting.sh stop      # take it offline (e.g. before gaming)
+scripts/hosting.sh status    # services, public URL, GPU memory
+```
+
+- Visitors share the GPU with whatever else runs on the PC. The 7 GB report model is unloaded after 10 idle minutes
+  (`MEDXVLM_IDLE_UNLOAD_SECONDS`); the classifier ensemble keeps ~1.4 GB while the app runs. Reports are generated one
+  at a time; concurrent visitors queue.
+- Keep Windows from sleeping. After a Windows restart, open the Ubuntu terminal once so WSL (and the services) start.
+- The Indiana test images are CC BY-NC-ND 4.0: the hosted demo must stay non-commercial and credits Open-i in the sidebar.
+
 ## Documentation
 
 - [docs/literature_review.md](docs/literature_review.md) — the literature
