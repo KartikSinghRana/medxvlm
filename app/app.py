@@ -20,6 +20,11 @@ import streamlit as st
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
+# Streamlit re-executes the page scripts on every interaction but keeps imported helper modules cached, so an
+# edited app/common.py only took effect after a server restart (an ImportError for any newly added helper).
+# Dropping it makes every run import the current file; its st.cache_* functions keep their caches, which
+# Streamlit keys by the function's source, so the loaded models are not reloaded.
+sys.modules.pop("common", None)
 
 st.set_page_config(page_title="MedXVLM", page_icon=":material/pulmonology:", layout="wide")
 st.logo(str(APP_DIR / "static" / "logo.svg"), icon_image=":material/pulmonology:", size="large")
