@@ -53,6 +53,7 @@ Generated 2026-09-21 from direct inspection of the working tree at `medxvlm/`; u
 
 - **Host disk is healthy again.** The F: drive (466 GB) hit 542 MB free on 2026-09-20 and forced a reboot; ~100 GB was freed inside WSL and the owner compacted the `.vhdx` (193 → 88 GB). `df /mnt/f` now reports 100 GB free; the WSL ext4 image uses 90 GB. `df /` inside WSL still reports a nominal 1 TB and is not the real limit.
 - All `last.pt` files were deleted (2026-09-21); `checkpoints/` is 9.2 GB of `best.pt` only.
+- **2026-09-27 local cleanup:** deleted the negative-result checkpoints `align_v2/local_on_valloss`, `align_v2/local_on_frozen_text`, `align_v3/sentence`, `report_gen_v2b/` and `report_gen_v2c/epoch3.pt`, plus unused model caches (Qwen2.5-0.5B, rad-dino, CXR-BERT, RRG_scorers) and the RadZero weights. Their results remain in `docs/phase5_artifacts/v2/`; re-running those specific evaluations (or RadZero) would need retraining or re-downloading. Everything the demo app uses is kept.
 - No GPU job is running; any further training requires the owner's go-ahead with a duration (standing constraint since 2026-09-20).
 
 ---
